@@ -2,12 +2,17 @@ import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, Bell, Sun, Moon, Save, Download, PanelLeftClose, PanelLeftOpen,
-  AlertCircle, AlertTriangle, Info, CheckCircle2, X, ArrowRight
+  AlertCircle, AlertTriangle, Info, CheckCircle2, X, ArrowRight,
+  FolderKanban, ChevronDown, Upload, PlusCircle, Copy
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
 import { useTaskStore } from '../../store/useTaskStore';
-import { saveDbNow, exportDatabase } from '../../db';
+import {
+  saveDbNow, exportDatabase, openProjectFileDialog, saveProjectAsDialog,
+  createNewBlankProject, getCurrentProjectFilePath, onProjectFileChange
+} from '../../db';
+import { projectConfigQueries } from '../../db/queries';
 import { format } from 'date-fns';
 
 const PAGE_TITLES: Record<string, string> = {
@@ -54,6 +59,46 @@ export default function TopBar() {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const alertsRef = useRef<HTMLDivElement>(null);
+
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(getCurrentProjectFilePath());
+  const projectMenuRef = useRef<HTMLDivElement>(null);
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+
+  useEffect(() => {
+    return onProjectFileChange((path: string | null) => {
+      setCurrentFilePath(path);
+    });
+  }, []);
+
+  // Click outside to close project menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(event.target as Node)) {
+        setProjectMenuOpen(false);
+      }
+    }
+    if (projectMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [projectMenuOpen]);
+
+  const projectName = useMemo(() => {
+    try {
+      const cfg = projectConfigQueries.get();
+      return cfg?.name || 'Customer Portal Migration';
+    } catch {
+      return 'Customer Portal Migration';
+    }
+  }, [currentFilePath, location.pathname]);
+
+  const currentFileName = useMemo(() => {
+    if (!currentFilePath) return null;
+    return currentFilePath.split(/[\\/]/).pop() || null;
+  }, [currentFilePath]);
 
   const title = PAGE_TITLES[location.pathname] || 'Project Tracking Tool';
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
@@ -253,6 +298,91 @@ export default function TopBar() {
 
       {/* Right controls */}
       <div className="flex items-center gap-2">
+        {/* Project File & Multi-Project Switcher */}
+        <div className="project-file-menu" ref={projectMenuRef}>
+          <button
+            className="btn btn-secondary btn-sm flex items-center gap-2"
+            onClick={() => setProjectMenuOpen(!projectMenuOpen)}
+            title="Project File & Workspace Manager"
+            id="topbar-project-menu-btn"
+            style={{ fontWeight: 500 }}
+          >
+            <FolderKanban size={14} color="var(--accent)" />
+            <span style={{ maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {currentFileName || projectName}
+            </span>
+            {isElectron ? (
+              <span className="badge badge-primary" style={{ fontSize: 9, padding: '1px 5px' }}>
+                Desktop
+              </span>
+            ) : (
+              <span className="badge badge-neutral" style={{ fontSize: 9, padding: '1px 5px' }}>
+                Local
+              </span>
+            )}
+            <ChevronDown size={12} style={{ opacity: 0.7 }} />
+          </button>
+
+          {projectMenuOpen && (
+            <div className="project-dropdown-card">
+              <div className="project-dropdown-header">
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Active Project {isElectron ? '(Desktop Mode)' : '(Local-First Mode)'}
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginTop: 2, wordBreak: 'break-all' }}>
+                  {currentFileName || projectName}
+                </div>
+                {currentFilePath && (
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
+                    {currentFilePath}
+                  </div>
+                )}
+              </div>
+
+              <div className="project-dropdown-actions">
+                <button
+                  className="project-dropdown-item"
+                  onClick={async () => {
+                    setProjectMenuOpen(false);
+                    await openProjectFileDialog();
+                  }}
+                >
+                  <Upload size={14} /> Open Project (.ptt / .db)...
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={async () => {
+                    setProjectMenuOpen(false);
+                    await saveProjectAsDialog(projectName ? `${projectName.replace(/\s+/g, '_')}.ptt` : 'Project.ptt');
+                  }}
+                >
+                  <Download size={14} /> Save Project As (.ptt)...
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={async () => {
+                    setProjectMenuOpen(false);
+                    if (window.confirm('Create a new blank project? Make sure you have saved or exported your current project first.')) {
+                      await createNewBlankProject();
+                    }
+                  }}
+                >
+                  <PlusCircle size={14} /> New Blank Project
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={async () => {
+                    setProjectMenuOpen(false);
+                    await saveProjectAsDialog(`Copy_of_${(projectName || 'Project').replace(/\s+/g, '_')}.ptt`);
+                  }}
+                >
+                  <Copy size={14} /> Duplicate Project (.ptt)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Search */}
         <button
           className="btn btn-secondary btn-sm"

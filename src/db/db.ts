@@ -10,11 +10,35 @@ let db: Database | null = null;
 
 const DB_KEY = 'ptt_db';
 
+let currentProjectFilePath: string | null = null;
+let projectChangeListeners: Array<(filePath: string | null) => void> = [];
+
+export function onProjectFileChange(cb: (filePath: string | null) => void): () => void {
+  projectChangeListeners.push(cb);
+  return () => {
+    projectChangeListeners = projectChangeListeners.filter(l => l !== cb);
+  };
+}
+
+function notifyProjectChange(filePath: string | null) {
+  currentProjectFilePath = filePath;
+  projectChangeListeners.forEach(cb => cb(filePath));
+}
+
+export function getCurrentProjectFilePath(): string | null {
+  return currentProjectFilePath;
+}
+
 // Initialize sql.js WASM
 async function getSql(): Promise<SqlJsStatic> {
   if (SQL) return SQL;
   SQL = await initSqlJs({
-    locateFile: (file: string) => `/${file}`,
+    locateFile: (file: string) => {
+      if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+        return `./${file}`;
+      }
+      return `/${file}`;
+    },
   });
   return SQL;
 }
@@ -40,7 +64,51 @@ export async function initDatabase(): Promise<Database> {
   }
 
   await runMigrations(db);
+
+  // Setup Electron listeners if in desktop app
+  setupElectronBridge();
+
   return db;
+}
+
+function setupElectronBridge(): void {
+  if (typeof window === 'undefined' || !window.electronAPI) return;
+
+  window.electronAPI.onProjectLoaded(async (payload) => {
+    try {
+      const sql = await getSql();
+      const bytes = new Uint8Array(payload.data);
+      db = new sql.Database(bytes);
+      await runMigrations(db);
+      notifyProjectChange(payload.filePath);
+      saveDbNow();
+      window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+    } catch (err) {
+      console.error('Failed to load project from Electron:', err);
+    }
+  });
+
+  window.electronAPI.onNewProject(async () => {
+    try {
+      const sql = await getSql();
+      db = new sql.Database();
+      db.run(SCHEMA);
+      await runMigrations(db);
+      notifyProjectChange(null);
+      saveDbNow();
+      window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+    } catch (err) {
+      console.error('Failed to create new project:', err);
+    }
+  });
+
+  window.electronAPI.onRequestSave(() => {
+    saveDbNow();
+  });
+
+  window.electronAPI.onRequestSaveAs(async () => {
+    await saveProjectAsDialog();
+  });
 }
 
 export function getDb(): Database {
@@ -48,7 +116,7 @@ export function getDb(): Database {
   return db;
 }
 
-// Persist to localStorage (called after every write)
+// Persist to localStorage and/or active desktop file
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 export function scheduleDbSave(): void {
   if (saveTimer) clearTimeout(saveTimer);
@@ -74,9 +142,98 @@ export function saveDbNow(): void {
     const data = db.export();
     const base64 = uint8ArrayToBase64(data);
     localStorage.setItem(DB_KEY, base64);
+
+    // If running in Electron with an active project file, save directly to disk
+    if (typeof window !== 'undefined' && window.electronAPI && currentProjectFilePath) {
+      window.electronAPI.saveProject(data, currentProjectFilePath);
+    }
   } catch (err) {
     console.error('Failed to save database:', err);
   }
+}
+
+// Save Project As (.ptt) via native desktop dialog or browser download
+export async function saveProjectAsDialog(suggestedName?: string): Promise<string | null> {
+  if (!db) return null;
+  const data = db.export();
+  const defaultName: string = suggestedName || (currentProjectFilePath ? currentProjectFilePath.split(/[\\/]/).pop() || 'Project.ptt' : 'Project.ptt');
+
+  if (typeof window !== 'undefined' && window.electronAPI) {
+    const res = await window.electronAPI.saveProjectAs(data, defaultName);
+    if (res?.filePath) {
+      notifyProjectChange(res.filePath);
+      return res.filePath;
+    }
+    return null;
+  }
+
+  // Web fallback: download .ptt file
+  const blob = new Blob([new Uint8Array(data)], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = defaultName.endsWith('.ptt') ? defaultName : `${defaultName}.ptt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  return a.download;
+}
+
+// Open Project File (.ptt / .db) via native desktop dialog or browser file picker
+export async function openProjectFileDialog(): Promise<string | null> {
+  const sql = await getSql();
+
+  if (typeof window !== 'undefined' && window.electronAPI) {
+    const res = await window.electronAPI.openProjectFile();
+    if (res) {
+      const bytes = new Uint8Array(res.data);
+      db = new sql.Database(bytes);
+      await runMigrations(db);
+      notifyProjectChange(res.filePath);
+      saveDbNow();
+      window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+      return res.fileName;
+    }
+    return null;
+  }
+
+  // Web file input fallback
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ptt,.db,application/x-sqlite3';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      try {
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        db = new sql.Database(bytes);
+        await runMigrations(db);
+        notifyProjectChange(file.name);
+        saveDbNow();
+        window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+        resolve(file.name);
+      } catch (err) {
+        console.error('Failed to import project file:', err);
+        resolve(null);
+      }
+    };
+    input.click();
+  });
+}
+
+// Create a new blank project
+export async function createNewBlankProject(): Promise<void> {
+  const sql = await getSql();
+  db = new sql.Database();
+  db.run(SCHEMA);
+  await runMigrations(db);
+  notifyProjectChange(null);
+  saveDbNow();
+  window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
 }
 
 // Export full database as downloadable file
@@ -87,7 +244,7 @@ export function exportDatabase(): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `project-backup-${new Date().toISOString().split('T')[0]}.db`;
+  a.download = `project-backup-${new Date().toISOString().split('T')[0]}.ptt`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -98,7 +255,10 @@ export async function importDatabase(file: File): Promise<void> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   db = new sql.Database(bytes);
+  await runMigrations(db);
+  notifyProjectChange(file.name);
   saveDbNow();
+  window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
 }
 
 // Generic query helpers

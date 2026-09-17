@@ -1,2 +1,6 @@
-// Re-export db utilities for cleaner imports
-export { query, queryOne, execute, generateId, initDatabase, getDb, saveDbNow, exportDatabase, importDatabase, scheduleDbSave } from './db';
+export {
+  query, queryOne, execute, generateId, initDatabase, getDb, saveDbNow,
+  exportDatabase, importDatabase, scheduleDbSave,
+  openProjectFileDialog, saveProjectAsDialog, createNewBlankProject,
+  getCurrentProjectFilePath, onProjectFileChange
+} from './db';

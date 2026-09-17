@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initDatabase } from './db';
 import { hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty, seedChangeRequestsIfEmpty } from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
@@ -56,6 +56,13 @@ export default function App() {
         console.error('DB init failed:', err);
         setError(String(err));
       });
+
+    const handleReload = () => {
+      loadTasks();
+      loadAll();
+    };
+    window.addEventListener('ptt:data-reloaded', handleReload);
+    return () => window.removeEventListener('ptt:data-reloaded', handleReload);
   }, []);
 
   if (error) {
@@ -71,7 +78,7 @@ export default function App() {
   if (!dbReady) return <LoadingScreen />;
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -101,6 +108,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

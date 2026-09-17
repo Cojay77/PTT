@@ -2903,3 +2903,56 @@ input, textarea, select {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+/* Project File Dropdown */
+.project-file-menu {
+  position: relative;
+}
+
+.project-dropdown-card {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 280px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  z-index: 1000;
+  overflow: hidden;
+  animation: fadeIn var(--transition-fast) ease;
+}
+
+.project-dropdown-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.project-dropdown-actions {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--transition-fast) ease, color var(--transition-fast) ease;
+}
+
+.project-dropdown-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--accent);
+}
