@@ -3,15 +3,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, Bell, Sun, Moon, Save, Download, PanelLeftClose, PanelLeftOpen,
   AlertCircle, AlertTriangle, Info, CheckCircle2, X, ArrowRight,
-  FolderKanban, ChevronDown, Upload, PlusCircle, Copy
+  FolderKanban, ChevronDown, Upload, PlusCircle, Copy, Lock, RefreshCw, FolderOpen, Check, Cloud
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
 import { useTaskStore } from '../../store/useTaskStore';
 import {
   saveDbNow, exportDatabase, openProjectFileDialog, saveProjectAsDialog,
-  createNewBlankProject, getCurrentProjectFilePath, onProjectFileChange
+  createNewBlankProject, getCurrentProjectFilePath, onProjectFileChange,
+  openProjectByFilePath, isReadOnlyProject, getActiveLockInfo, setReadOnlyMode
 } from '../../db';
+import type { ProjectListItem } from '../../types/electron';
 import { projectConfigQueries } from '../../db/queries';
 import { format } from 'date-fns';
 
@@ -65,9 +67,64 @@ export default function TopBar() {
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 
+  const [sharedFolder, setSharedFolder] = useState<string | null>(null);
+  const [projectList, setProjectList] = useState<ProjectListItem[]>([]);
+  const [externalUpdate, setExternalUpdate] = useState<{ fileName: string; filePath: string } | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState<boolean>(isReadOnlyProject());
+  const [lockInfo, setLockInfo] = useState<{ pilot: string; computer: string; timestamp: string } | null>(getActiveLockInfo());
+
+  // Load shared folder & project list on mount & when menu opens
+  const refreshProjectsList = useCallback(async () => {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        const folder = await window.electronAPI.getSavedProjectsFolder();
+        setSharedFolder(folder);
+        if (folder) {
+          const items = await window.electronAPI.listProjectsInFolder(folder);
+          setProjectList(items);
+        }
+      } catch (err) {
+        console.error('Failed to list projects:', err);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProjectsList();
+  }, [refreshProjectsList]);
+
+  useEffect(() => {
+    if (projectMenuOpen) {
+      refreshProjectsList();
+    }
+  }, [projectMenuOpen, refreshProjectsList]);
+
+  // Listen for external updates (e.g. Google Drive sync) and lock changes
+  useEffect(() => {
+    const handleExternal = (e: Event) => {
+      const customEvent = e as CustomEvent<{ fileName: string; filePath: string }>;
+      setExternalUpdate(customEvent.detail);
+    };
+    const handleLock = (e: Event) => {
+      const customEvent = e as CustomEvent<{ isReadOnly: boolean; lockInfo: { pilot: string; computer: string; timestamp: string } | null }>;
+      setIsReadOnly(customEvent.detail.isReadOnly);
+      setLockInfo(customEvent.detail.lockInfo);
+    };
+
+    window.addEventListener('ptt:external-change', handleExternal);
+    window.addEventListener('ptt:lock-status-changed', handleLock);
+
+    return () => {
+      window.removeEventListener('ptt:external-change', handleExternal);
+      window.removeEventListener('ptt:lock-status-changed', handleLock);
+    };
+  }, []);
+
   useEffect(() => {
     return onProjectFileChange((path: string | null) => {
       setCurrentFilePath(path);
+      setIsReadOnly(isReadOnlyProject());
+      setLockInfo(getActiveLockInfo());
     });
   }, []);
 
@@ -276,6 +333,37 @@ export default function TopBar() {
 
   return (
     <header className="topbar">
+      {/* Floating Google Drive Sync Toast */}
+      {externalUpdate && (
+        <div className="sync-notification-bar">
+          <div className="flex items-center gap-2">
+            <Cloud size={18} color="var(--accent)" />
+            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+              <strong>Google Drive Synced:</strong> A newer version of <em>{externalUpdate.fileName}</em> was saved by another team member.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={async () => {
+                const target = externalUpdate.filePath;
+                setExternalUpdate(null);
+                await openProjectByFilePath(target);
+              }}
+            >
+              <RefreshCw size={13} /> Reload Changes
+            </button>
+            <button
+              className="btn-icon btn-ghost btn-sm"
+              onClick={() => setExternalUpdate(null)}
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Left section: Sidebar toggle + Page title */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <button
@@ -311,7 +399,11 @@ export default function TopBar() {
             <span style={{ maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {currentFileName || projectName}
             </span>
-            {isElectron ? (
+            {isReadOnly ? (
+              <span className="badge badge-warning flex items-center gap-1" style={{ fontSize: 9, padding: '1px 5px' }} title={`Piloted by ${lockInfo?.pilot || 'another PM'}`}>
+                <Lock size={9} /> Review
+              </span>
+            ) : isElectron ? (
               <span className="badge badge-primary" style={{ fontSize: 9, padding: '1px 5px' }}>
                 Desktop
               </span>
@@ -332,12 +424,98 @@ export default function TopBar() {
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginTop: 2, wordBreak: 'break-all' }}>
                   {currentFileName || projectName}
                 </div>
+                {isReadOnly && (
+                  <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Lock size={11} /> Piloted by <strong>{lockInfo?.pilot || 'another PM'}</strong> on {lockInfo?.computer} (Read-Only)
+                  </div>
+                )}
                 {currentFilePath && (
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
                     {currentFilePath}
                   </div>
                 )}
               </div>
+
+              {/* Shared Team Workspace / Google Drive Section */}
+              <div className="project-dropdown-section-title">
+                <span>Shared Projects (Google Drive)</span>
+                {isElectron && (
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    onClick={async () => {
+                      const folder = await window.electronAPI?.selectProjectsFolder();
+                      if (folder) {
+                        setSharedFolder(folder);
+                        await refreshProjectsList();
+                      }
+                    }}
+                    title="Choose Google Drive synced folder"
+                    style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent)' }}
+                  >
+                    <FolderOpen size={12} /> {sharedFolder ? 'Change Folder' : 'Set Folder'}
+                  </button>
+                )}
+              </div>
+
+              {sharedFolder ? (
+                <div className="project-list-scroll">
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 10px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    📁 {sharedFolder}
+                  </div>
+                  {projectList.length === 0 ? (
+                    <div style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)' }}>
+                      No .ptt project files in this folder yet.
+                    </div>
+                  ) : (
+                    projectList.map((item) => {
+                      const isActive = currentFilePath === item.filePath;
+                      return (
+                        <button
+                          key={item.filePath}
+                          className={`project-list-item-btn${isActive ? ' active' : ''}`}
+                          onClick={async () => {
+                            setProjectMenuOpen(false);
+                            await openProjectByFilePath(item.filePath);
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            {isActive ? (
+                              <Check size={14} color="var(--accent)" />
+                            ) : (
+                              <FolderKanban size={14} color="var(--text-muted)" />
+                            )}
+                            <div style={{ textAlign: 'left', minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item.fileName.replace(/\.(ptt|db)$/, '')}
+                              </div>
+                              {item.lockInfo && !isActive && (
+                                <div style={{ fontSize: 10, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <Lock size={9} /> Piloted by {item.lockInfo.pilot}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            {item.fileName.endsWith('.ptt') ? '.ptt' : '.db'}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '8px 14px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {isElectron ? (
+                    <div>
+                      Point PTT to your team's Google Drive folder to list and switch projects in 1 click.
+                    </div>
+                  ) : (
+                    <div>
+                      Running in web mode. In Desktop mode, choose a Google Drive folder to list all team projects automatically.
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="project-dropdown-actions">
                 <button

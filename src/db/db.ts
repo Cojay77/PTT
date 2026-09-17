@@ -71,6 +71,22 @@ export async function initDatabase(): Promise<Database> {
   return db;
 }
 
+let isReadOnlyMode = false;
+let activeLockInfo: { pilot: string; computer: string; timestamp: string } | null = null;
+
+export function isReadOnlyProject(): boolean {
+  return isReadOnlyMode;
+}
+
+export function getActiveLockInfo() {
+  return activeLockInfo;
+}
+
+export function setReadOnlyMode(val: boolean): void {
+  isReadOnlyMode = val;
+  window.dispatchEvent(new CustomEvent('ptt:lock-status-changed', { detail: { isReadOnly: val } }));
+}
+
 function setupElectronBridge(): void {
   if (typeof window === 'undefined' || !window.electronAPI) return;
 
@@ -80,9 +96,14 @@ function setupElectronBridge(): void {
       const bytes = new Uint8Array(payload.data);
       db = new sql.Database(bytes);
       await runMigrations(db);
+      isReadOnlyMode = !!payload.isLockedByOther;
+      activeLockInfo = payload.lockInfo || null;
       notifyProjectChange(payload.filePath);
       saveDbNow();
       window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+      window.dispatchEvent(new CustomEvent('ptt:lock-status-changed', {
+        detail: { isReadOnly: isReadOnlyMode, lockInfo: activeLockInfo }
+      }));
     } catch (err) {
       console.error('Failed to load project from Electron:', err);
     }
@@ -94,9 +115,14 @@ function setupElectronBridge(): void {
       db = new sql.Database();
       db.run(SCHEMA);
       await runMigrations(db);
+      isReadOnlyMode = false;
+      activeLockInfo = null;
       notifyProjectChange(null);
       saveDbNow();
       window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+      window.dispatchEvent(new CustomEvent('ptt:lock-status-changed', {
+        detail: { isReadOnly: false, lockInfo: null }
+      }));
     } catch (err) {
       console.error('Failed to create new project:', err);
     }
@@ -108,6 +134,10 @@ function setupElectronBridge(): void {
 
   window.electronAPI.onRequestSaveAs(async () => {
     await saveProjectAsDialog();
+  });
+
+  window.electronAPI.onExternalChange((payload) => {
+    window.dispatchEvent(new CustomEvent('ptt:external-change', { detail: payload }));
   });
 }
 
@@ -143,13 +173,40 @@ export function saveDbNow(): void {
     const base64 = uint8ArrayToBase64(data);
     localStorage.setItem(DB_KEY, base64);
 
-    // If running in Electron with an active project file, save directly to disk
+    // If running in Electron with an active project file, save directly to disk unless in read-only mode
     if (typeof window !== 'undefined' && window.electronAPI && currentProjectFilePath) {
-      window.electronAPI.saveProject(data, currentProjectFilePath);
+      if (!isReadOnlyMode) {
+        window.electronAPI.saveProject(data, currentProjectFilePath);
+      }
     }
   } catch (err) {
     console.error('Failed to save database:', err);
   }
+}
+
+// Open project directly by file path (e.g. from shared folder list)
+export async function openProjectByFilePath(filePath: string, pilotName?: string): Promise<string | null> {
+  const sql = await getSql();
+
+  if (typeof window !== 'undefined' && window.electronAPI) {
+    const res = await window.electronAPI.openFileByPath(filePath, pilotName);
+    if (res) {
+      const bytes = new Uint8Array(res.data);
+      db = new sql.Database(bytes);
+      await runMigrations(db);
+      isReadOnlyMode = !!res.isLockedByOther;
+      activeLockInfo = res.lockInfo || null;
+      notifyProjectChange(res.filePath);
+      saveDbNow();
+      window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+      window.dispatchEvent(new CustomEvent('ptt:lock-status-changed', {
+        detail: { isReadOnly: isReadOnlyMode, lockInfo: activeLockInfo }
+      }));
+      return res.fileName;
+    }
+    return null;
+  }
+  return null;
 }
 
 // Save Project As (.ptt) via native desktop dialog or browser download
