@@ -680,6 +680,39 @@ export default function TeamCalendar() {
     });
   }
 
+  // Helper: Stakeholder absences on a specific calendar day (with milestone gate conflict info)
+  function getStakeholderAbsencesForDay(day: Date): Array<{
+    stakeholder?: Stakeholder;
+    absence: Absence;
+    isConflict: boolean;
+    milestones: Milestone[];
+  }> {
+    const result: Array<{
+      stakeholder?: Stakeholder;
+      absence: Absence;
+      isConflict: boolean;
+      milestones: Milestone[];
+    }> = [];
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const dayMilestones = milestonesByDate[dateStr] || [];
+    const isMilestoneDay = dayMilestones.length > 0;
+
+    for (const a of stakeholderAbsences) {
+      try {
+        if (isWithinInterval(day, { start: parseISO(a.startDate), end: parseISO(a.endDate) })) {
+          const stk = stakeholders.find(s => s.id === a.resourceId);
+          result.push({
+            stakeholder: stk,
+            absence: a,
+            isConflict: isMilestoneDay,
+            milestones: dayMilestones,
+          });
+        }
+      } catch {}
+    }
+    return result;
+  }
+
   // Helper: Absences for a resource on a specific day
   function getAbsencesForResourceDay(resourceId: string, day: Date): Absence[] {
     return filteredAbsences.filter(a => {
@@ -1661,213 +1694,565 @@ export default function TeamCalendar() {
           </div>
         )}
 
-        {/* Stakeholder Calendar Matrix */}
-        <div className="team-matrix-wrapper">
-          <table className="team-matrix-table">
-            <thead>
-              <tr>
-                <th
-                  style={{
-                    width: 260,
-                    minWidth: 260,
-                    textAlign: 'left',
-                    padding: '8px 12px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)',
-                    position: 'sticky',
-                    left: 0,
-                    zIndex: 3,
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span>Key Stakeholder</span>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Influence / Role</span>
-                  </div>
-                </th>
-                {teamViewDays.map(d => {
-                  const dateStr = format(d, 'yyyy-MM-dd');
-                  const isCurrentDay = isSameDay(d, today);
-                  const isSatSun = isWeekend(d);
-                  const dayMilestones = milestonesByDate[dateStr];
-                  const hasMilestone = dayMilestones && dayMilestones.length > 0;
-
-                  return (
+        {/* VIEW 1 (Team View): Stakeholder Calendar Matrix */}
+        {view === 'team' && (
+          <div>
+            <div className="team-matrix-wrapper">
+              <table className="team-matrix-table">
+                <thead>
+                  <tr>
                     <th
-                      key={d.toISOString()}
                       style={{
-                        padding: '6px 2px',
-                        textAlign: 'center',
-                        minWidth: 34,
-                        background: hasMilestone
-                          ? 'rgba(247, 154, 79, 0.2)'
-                          : isCurrentDay
-                          ? 'var(--accent-soft)'
-                          : isSatSun
-                          ? 'var(--bg-hover)'
-                          : 'var(--bg-elevated)',
-                        border: hasMilestone ? '2px solid var(--warning)' : '1px solid var(--border)',
-                        color: hasMilestone ? 'var(--warning)' : isCurrentDay ? 'var(--accent)' : 'var(--text-secondary)',
-                        fontWeight: hasMilestone || isCurrentDay ? 700 : 600,
-                      }}
-                      title={hasMilestone ? `Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}` : undefined}
-                    >
-                      <div style={{ fontSize: 11 }}>{format(d, 'd')}</div>
-                      {hasMilestone ? (
-                        <div style={{ fontSize: 9, color: 'var(--warning)', fontWeight: 800 }}>🎯</div>
-                      ) : (
-                        <div style={{ fontSize: 8, opacity: 0.7, textTransform: 'uppercase' }}>
-                          {format(d, 'EEE')}
-                        </div>
-                      )}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {stakeholders.map(stk => {
-                return (
-                  <tr key={stk.id}>
-                    {/* Stakeholder Info Column */}
-                    <td
-                      style={{
+                        width: 260,
+                        minWidth: 260,
+                        textAlign: 'left',
                         padding: '8px 12px',
-                        background: 'var(--bg-surface)',
+                        background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
                         position: 'sticky',
                         left: 0,
-                        zIndex: 2,
+                        zIndex: 3,
                       }}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Avatar name={stk.name} size={26} />
-                          <div className="min-w-0">
-                            <div style={{ fontWeight: 600, fontSize: 12 }} className="truncate">
-                              {stk.name}
-                            </div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: 10 }} className="truncate">
-                              {stk.role} · {stk.organization}
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className={`badge badge-${
-                            stk.influenceLevel === 'very-high'
-                              ? 'danger'
-                              : stk.influenceLevel === 'high'
-                              ? 'warning'
-                              : 'neutral'
-                          }`}
-                          style={{ fontSize: 9, padding: '1px 5px', flexShrink: 0 }}
-                        >
-                          {stk.influenceLevel}
-                        </span>
+                      <div className="flex items-center justify-between">
+                        <span>Key Stakeholder</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Influence / Role</span>
                       </div>
-                    </td>
-
-                    {/* Day Cells */}
+                    </th>
                     {teamViewDays.map(d => {
                       const dateStr = format(d, 'yyyy-MM-dd');
-                      const dayAbsences = getAbsencesForStakeholderDay(stk.id, d);
-                      const hasAbsence = dayAbsences.length > 0;
-                      const dayMilestones = milestonesByDate[dateStr];
-                      const isMilestoneDay = dayMilestones && dayMilestones.length > 0;
-                      const hasConflict = hasAbsence && isMilestoneDay;
                       const isCurrentDay = isSameDay(d, today);
                       const isSatSun = isWeekend(d);
+                      const dayMilestones = milestonesByDate[dateStr];
+                      const hasMilestone = dayMilestones && dayMilestones.length > 0;
 
                       return (
-                        <td
+                        <th
                           key={d.toISOString()}
-                          className={`team-matrix-cell${hasAbsence ? ' has-absence' : ' empty-cell'}`}
                           style={{
-                            background: hasConflict
-                              ? 'rgba(239, 68, 68, 0.2)'
+                            padding: '6px 2px',
+                            textAlign: 'center',
+                            minWidth: 34,
+                            background: hasMilestone
+                              ? 'rgba(247, 154, 79, 0.2)'
                               : isCurrentDay
                               ? 'var(--accent-soft)'
                               : isSatSun
                               ? 'var(--bg-hover)'
-                              : 'var(--bg-surface)',
-                            border: hasConflict
-                              ? '2px solid var(--danger)'
-                              : isMilestoneDay
-                              ? '1px dashed var(--warning)'
-                              : '1px solid var(--border)',
+                              : 'var(--bg-elevated)',
+                            border: hasMilestone ? '2px solid var(--warning)' : '1px solid var(--border)',
+                            color: hasMilestone ? 'var(--warning)' : isCurrentDay ? 'var(--accent)' : 'var(--text-secondary)',
+                            fontWeight: hasMilestone || isCurrentDay ? 700 : 600,
                           }}
-                          onClick={() => {
-                            if (hasAbsence) {
-                              handleOpenStakeholderEdit(dayAbsences[0]);
-                            } else {
-                              handleOpenStakeholderCreate(stk.id, dateStr);
-                            }
-                          }}
-                          title={
-                            hasConflict
-                              ? `⚠️ CONFLICT: ${stk.name} is absent during Milestone: ${dayMilestones.map(m => m.name).join(', ')} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\nNotes: ${dayAbsences[0].notes || 'None'}`
-                              : hasAbsence
-                              ? `${stk.name}: ${dayAbsences[0].type.toUpperCase()} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\n${dayAbsences[0].notes || ''}`
-                              : isMilestoneDay
-                              ? `Milestone: ${dayMilestones.map(m => m.name).join(', ')}. Click to log absence for ${stk.name}.`
-                              : `Click to log absence for ${stk.name} on ${dateStr}`
-                          }
+                          title={hasMilestone ? `Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}` : undefined}
                         >
-                          {hasConflict ? (
-                            <div
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                background: 'var(--danger)',
-                                color: 'white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 10,
-                                fontWeight: 700,
-                                borderRadius: 'var(--radius-xs)',
-                              }}
-                            >
-                              ⚠️ GATE
+                          <div style={{ fontSize: 11 }}>{format(d, 'd')}</div>
+                          {hasMilestone ? (
+                            <div style={{ fontSize: 9, color: 'var(--warning)', fontWeight: 800 }}>🎯</div>
+                          ) : (
+                            <div style={{ fontSize: 8, opacity: 0.7, textTransform: 'uppercase' }}>
+                              {format(d, 'EEE')}
                             </div>
-                          ) : hasAbsence ? (
-                            <div
-                              className="team-matrix-absence-block"
-                              style={{
-                                background: ABSENCE_COLORS[dayAbsences[0].type] || '#7c6af7',
-                                color: '#ffffff',
-                              }}
-                            >
-                              {(ABSENCE_TYPES.find(t => t.value === dayAbsences[0].type)?.short ||
-                                dayAbsences[0].type.slice(0, 3)
-                              ).toUpperCase()}
-                            </div>
-                          ) : isMilestoneDay ? (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                opacity: 0.6,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                height: '100%',
-                              }}
-                            >
-                              🎯
-                            </div>
-                          ) : null}
-                        </td>
+                          )}
+                        </th>
                       );
                     })}
                   </tr>
+                </thead>
+                <tbody>
+                  {stakeholders.map(stk => {
+                    return (
+                      <tr key={stk.id}>
+                        {/* Stakeholder Info Column */}
+                        <td
+                          style={{
+                            padding: '8px 12px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border)',
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 2,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar name={stk.name} size={26} />
+                              <div className="min-w-0">
+                                <div style={{ fontWeight: 600, fontSize: 12 }} className="truncate">
+                                  {stk.name}
+                                </div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: 10 }} className="truncate">
+                                  {stk.role} · {stk.organization}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              className={`badge badge-${
+                                stk.influenceLevel === 'very-high'
+                                  ? 'danger'
+                                  : stk.influenceLevel === 'high'
+                                  ? 'warning'
+                                  : 'neutral'
+                              }`}
+                              style={{ fontSize: 9, padding: '1px 5px', flexShrink: 0 }}
+                            >
+                              {stk.influenceLevel}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Day Cells */}
+                        {teamViewDays.map(d => {
+                          const dateStr = format(d, 'yyyy-MM-dd');
+                          const dayAbsences = getAbsencesForStakeholderDay(stk.id, d);
+                          const hasAbsence = dayAbsences.length > 0;
+                          const dayMilestones = milestonesByDate[dateStr];
+                          const isMilestoneDay = dayMilestones && dayMilestones.length > 0;
+                          const hasConflict = hasAbsence && isMilestoneDay;
+                          const isCurrentDay = isSameDay(d, today);
+                          const isSatSun = isWeekend(d);
+
+                          return (
+                            <td
+                              key={d.toISOString()}
+                              className={`team-matrix-cell${hasAbsence ? ' has-absence' : ' empty-cell'}`}
+                              style={{
+                                background: hasConflict
+                                  ? 'rgba(239, 68, 68, 0.2)'
+                                  : isCurrentDay
+                                  ? 'var(--accent-soft)'
+                                  : isSatSun
+                                  ? 'var(--bg-hover)'
+                                  : 'var(--bg-surface)',
+                                border: hasConflict
+                                  ? '2px solid var(--danger)'
+                                  : isMilestoneDay
+                                  ? '1px dashed var(--warning)'
+                                  : '1px solid var(--border)',
+                              }}
+                              onClick={() => {
+                                if (hasAbsence) {
+                                  handleOpenStakeholderEdit(dayAbsences[0]);
+                                } else {
+                                  handleOpenStakeholderCreate(stk.id, dateStr);
+                                }
+                              }}
+                              title={
+                                hasConflict
+                                  ? `⚠️ CONFLICT: ${stk.name} is absent during Milestone: ${dayMilestones.map(m => m.name).join(', ')} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\nNotes: ${dayAbsences[0].notes || 'None'}`
+                                  : hasAbsence
+                                  ? `${stk.name}: ${dayAbsences[0].type.toUpperCase()} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\n${dayAbsences[0].notes || ''}`
+                                  : isMilestoneDay
+                                  ? `Milestone: ${dayMilestones.map(m => m.name).join(', ')}. Click to log absence for ${stk.name}.`
+                                  : `Click to log absence for ${stk.name} on ${dateStr}`
+                              }
+                            >
+                              {hasConflict ? (
+                                <div
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    background: 'var(--danger)',
+                                    color: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    borderRadius: 'var(--radius-xs)',
+                                  }}
+                                >
+                                  ⚠️ GATE
+                                </div>
+                              ) : hasAbsence ? (
+                                <div
+                                  className="team-matrix-absence-block"
+                                  style={{
+                                    background: ABSENCE_COLORS[dayAbsences[0].type] || '#7c6af7',
+                                    color: '#ffffff',
+                                  }}
+                                >
+                                  {(ABSENCE_TYPES.find(t => t.value === dayAbsences[0].type)?.short ||
+                                    dayAbsences[0].type.slice(0, 3)
+                                  ).toUpperCase()}
+                                </div>
+                              ) : isMilestoneDay ? (
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    opacity: 0.6,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    height: '100%',
+                                  }}
+                                >
+                                  🎯
+                                </div>
+                              ) : null}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span>💡 <strong>Milestone Guard:</strong> Red cells (⚠️ GATE) indicate a stakeholder will be absent on a milestone target date. Click any cell to record or edit their availability.</span>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 2 (Month View): Stakeholder Monthly Calendar Grid */}
+        {view === 'month' && (
+          <div>
+            <div className="month-calendar-grid">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(dayName => (
+                <div key={dayName} className="month-calendar-header">
+                  {dayName}
+                </div>
+              ))}
+
+              {monthCalendarDays.map(d => {
+                const inMonth = d.getMonth() === currentMonth.getMonth();
+                const isCurrentDay = isSameDay(d, today);
+                const dateStr = format(d, 'yyyy-MM-dd');
+                const dayMilestones = milestonesByDate[dateStr] || [];
+                const hasMilestone = dayMilestones.length > 0;
+                const dayItems = getStakeholderAbsencesForDay(d);
+                const hasConflict = dayItems.some(item => item.isConflict);
+
+                return (
+                  <div
+                    key={d.toISOString()}
+                    className="month-calendar-cell"
+                    style={{
+                      opacity: inMonth ? 1 : 0.35,
+                      background: hasConflict
+                        ? 'rgba(239, 68, 68, 0.12)'
+                        : hasMilestone
+                        ? 'rgba(247, 154, 79, 0.08)'
+                        : isCurrentDay
+                        ? 'var(--accent-soft)'
+                        : 'var(--bg-surface)',
+                      border: hasConflict
+                        ? '1px solid var(--danger)'
+                        : hasMilestone
+                        ? '1px dashed var(--warning)'
+                        : undefined,
+                      minHeight: 110,
+                    }}
+                    onClick={e => {
+                      if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('cell-bg')) {
+                        handleOpenStakeholderCreate(undefined, dateStr);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                      <div className="flex items-center gap-1">
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: isCurrentDay ? 800 : 600,
+                            color: isCurrentDay ? '#ffffff' : inMonth ? 'var(--text-primary)' : 'var(--text-muted)',
+                            width: 22,
+                            height: 22,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '50%',
+                            background: isCurrentDay ? 'var(--accent)' : 'transparent',
+                          }}
+                        >
+                          {format(d, 'd')}
+                        </span>
+                        {hasMilestone && (
+                          <span
+                            title={`Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}`}
+                            style={{ fontSize: 11, cursor: 'help' }}
+                          >
+                            🎯
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        className="btn-icon btn-ghost add-day-btn"
+                        style={{ width: 20, height: 20, padding: 0 }}
+                        title={`Add stakeholder absence on ${dateStr}`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleOpenStakeholderCreate(undefined, dateStr);
+                        }}
+                      >
+                        <Plus size={12} />
+                      </button>
+                    </div>
+
+                    {/* Milestone Banner Pill on this day */}
+                    {hasMilestone && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+                        {dayMilestones.map(m => (
+                          <div
+                            key={m.id}
+                            style={{
+                              fontSize: 9,
+                              padding: '2px 5px',
+                              borderRadius: 'var(--radius-xs)',
+                              background: 'rgba(247, 154, 79, 0.2)',
+                              color: 'var(--warning)',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              border: '1px solid rgba(247, 154, 79, 0.4)',
+                            }}
+                            title={`Milestone Gate: ${m.name} (${m.status})`}
+                          >
+                            <span style={{ fontSize: 9 }}>GATE:</span>
+                            <span className="truncate">{m.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Stakeholder absences on this day */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                      {dayItems.slice(0, 4).map(({ stakeholder: stk, absence, isConflict, milestones }) => {
+                        const color = ABSENCE_COLORS[absence.type] || '#4f8ef7';
+                        const stkName = stk?.name || absence.resourceName || 'Unknown';
+                        const shortName = stkName.split(' ')[0];
+
+                        return isConflict ? (
+                          <div
+                            key={`${absence.id}-${dateStr}`}
+                            className="month-absence-pill"
+                            style={{
+                              background: 'var(--danger)',
+                              color: '#ffffff',
+                              borderLeft: '3px solid #b91c1c',
+                              fontWeight: 700,
+                              fontSize: 10,
+                              boxShadow: '0 1px 3px rgba(239, 68, 68, 0.3)',
+                            }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleOpenStakeholderEdit(absence);
+                            }}
+                            title={`⚠️ CONFLICT: ${stkName} is absent during Milestone Gate "${milestones.map(m => m.name).join(', ')}"\nNotes: ${absence.notes || 'None'}\n(Click to edit or resolve)`}
+                          >
+                            <span>⚠️</span>
+                            <span className="truncate">{shortName}: ABSENT (GATE)</span>
+                          </div>
+                        ) : (
+                          <div
+                            key={`${absence.id}-${dateStr}`}
+                            className="month-absence-pill"
+                            style={{
+                              background: `${color}25`,
+                              color: color,
+                              borderLeft: `3px solid ${color}`,
+                              fontSize: 10,
+                            }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleOpenStakeholderEdit(absence);
+                            }}
+                            title={`${stkName} (${absence.type})\n${absence.startDate} → ${absence.endDate}\n${absence.notes || ''}\n(Click to edit)`}
+                          >
+                            <span style={{ fontWeight: 700 }}>{shortName}:</span>
+                            <span style={{ opacity: 0.85 }} className="truncate">
+                              {(ABSENCE_TYPES.find(t => t.value === absence.type)?.short || absence.type).toUpperCase()}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {dayItems.length > 4 && (
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: 'var(--text-muted)',
+                            fontWeight: 600,
+                            padding: '1px 4px',
+                          }}
+                        >
+                          +{dayItems.length - 4} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </div>
 
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span>💡 <strong>Milestone Guard:</strong> Red cells (⚠️ GATE) indicate a stakeholder will be absent on a milestone target date. Click any cell to record or edit their availability.</span>
-        </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+              💡 <strong>Month View Guard:</strong> Days with milestone gates are tagged with <strong>GATE</strong>. If an essential stakeholder is absent on a gate day, their entry appears in red (<strong>⚠️ GATE</strong>). Click any day to log stakeholder availability or click a pill to edit.
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3 (List View): Stakeholder Absence Log */}
+        {view === 'list' && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Key Stakeholder</th>
+                  <th>Type</th>
+                  <th>Date Range</th>
+                  <th>Duration</th>
+                  <th>Milestone Gate Conflict</th>
+                  <th>Handover & Notes</th>
+                  <th style={{ width: 100, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stakeholderAbsences.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No stakeholder absences recorded. All stakeholders are fully available.
+                    </td>
+                  </tr>
+                ) : (
+                  stakeholderAbsences.map(abs => {
+                    const stk = stakeholders.find(s => s.id === abs.resourceId);
+                    const dur = calculateDays(abs.startDate, abs.endDate);
+                    const color = ABSENCE_COLORS[abs.type] || '#4f8ef7';
+                    const isUpcoming = abs.startDate > todayStr;
+                    const isCurrent = abs.startDate <= todayStr && abs.endDate >= todayStr;
+
+                    const conflictingMilestones = monthMilestones.filter(m => {
+                      try {
+                        const mDate = parseISO(m.targetDate);
+                        return isWithinInterval(mDate, { start: parseISO(abs.startDate), end: parseISO(abs.endDate) });
+                      } catch {
+                        return false;
+                      }
+                    });
+                    const hasConflict = conflictingMilestones.length > 0;
+
+                    return (
+                      <tr key={abs.id}>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <Avatar name={abs.resourceName || stk?.name || 'Unknown'} size={26} />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span style={{ fontWeight: 600 }}>{abs.resourceName || stk?.name}</span>
+                                {stk?.influenceLevel && (
+                                  <span
+                                    className={`badge badge-${
+                                      stk.influenceLevel === 'very-high'
+                                        ? 'danger'
+                                        : stk.influenceLevel === 'high'
+                                        ? 'warning'
+                                        : 'neutral'
+                                    }`}
+                                    style={{ fontSize: 9, padding: '1px 5px' }}
+                                  >
+                                    {stk.influenceLevel}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                {stk?.role || 'Stakeholder'} · {stk?.organization || 'Organization'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={{
+                              background: `${color}20`,
+                              color: color,
+                              borderColor: `${color}40`,
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: color,
+                                marginRight: 6,
+                              }}
+                            />
+                            {ABSENCE_TYPES.find(t => t.value === abs.type)?.label || abs.type}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 500 }}>
+                            {abs.startDate} → {abs.endDate}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            {isCurrent ? (
+                              <span style={{ color: 'var(--warning)', fontWeight: 600 }}>● Away Today</span>
+                            ) : isUpcoming ? (
+                              <span style={{ color: 'var(--accent)' }}>Upcoming</span>
+                            ) : (
+                              'Past'
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{dur.businessDays} business days</span>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            ({dur.totalDays} calendar {dur.totalDays === 1 ? 'day' : 'days'})
+                          </div>
+                        </td>
+                        <td>
+                          {hasConflict ? (
+                            <span className="badge badge-danger" style={{ fontSize: 11, fontWeight: 700 }}>
+                              ⚠️ Gate Conflict: {conflictingMilestones.map(m => m.name).join(', ')}
+                            </span>
+                          ) : (
+                            <span className="badge badge-success" style={{ fontSize: 11 }}>
+                              <CheckCircle2 size={12} style={{ marginRight: 4 }} /> No Gate Conflict
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ maxWidth: 280 }}>
+                          <span style={{ color: abs.notes ? 'var(--text-secondary)' : 'var(--text-placeholder)' }}>
+                            {abs.notes || '—'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              className="btn-icon btn-ghost btn-sm"
+                              onClick={() => handleOpenStakeholderEdit(abs)}
+                              title="Edit stakeholder absence"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              className="btn-icon btn-ghost btn-sm"
+                              style={{ color: 'var(--danger)' }}
+                              onClick={() => {
+                                if (window.confirm(`Delete absence for ${abs.resourceName}?`)) {
+                                  handleDeleteAbsence(abs.id);
+                                }
+                              }}
+                              title="Delete absence"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Absence Modal (Team Members) */}
