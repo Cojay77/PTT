@@ -380,12 +380,38 @@ export const absenceQueries = {
     const future = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
     return query<Record<string, unknown>>(`SELECT * FROM absences WHERE end_date >= ? AND start_date <= ? ORDER BY start_date ASC`, [today, future]).map(rowToAbsence);
   },
+  getById(id: string): Absence | null {
+    const r = queryOne<Record<string, unknown>>(`SELECT * FROM absences WHERE id = ?`, [id]);
+    return r ? rowToAbsence(r) : null;
+  },
   create(m: Partial<Absence>): Absence {
     const id = generateId(); const now = new Date().toISOString();
     execute(`INSERT INTO absences (id, resource_id, resource_name, type, start_date, end_date, notes, created_at) VALUES (?,?,?,?,?,?,?,?)`,
       [id, m.resourceId || '', m.resourceName || '', m.type || 'vacation', m.startDate || '', m.endDate || '', m.notes || '', now]);
     const r = queryOne<Record<string, unknown>>(`SELECT * FROM absences WHERE id = ?`, [id])!;
     return rowToAbsence(r);
+  },
+  update(id: string, updates: Partial<Absence>): Absence | null {
+    const map: Record<string, string> = {
+      resourceId: 'resource_id',
+      resourceName: 'resource_name',
+      type: 'type',
+      startDate: 'start_date',
+      endDate: 'end_date',
+      notes: 'notes',
+    };
+    const fields: string[] = [], values: (string | number | null | boolean)[] = [];
+    for (const [k, col] of Object.entries(map)) {
+      if (k in updates) {
+        fields.push(`${col} = ?`);
+        values.push(updates[k as keyof Absence] as string);
+      }
+    }
+    if (fields.length > 0) {
+      values.push(id);
+      execute(`UPDATE absences SET ${fields.join(', ')} WHERE id = ?`, values);
+    }
+    return this.getById(id);
   },
   delete(id: string) { execute(`DELETE FROM absences WHERE id = ?`, [id]); },
 };

@@ -80,6 +80,7 @@ interface DataState {
 
   // Absences
   createAbsence: (a: Partial<Absence>) => Absence;
+  updateAbsence: (id: string, u: Partial<Absence>) => void;
   deleteAbsence: (id: string) => void;
 
   // Meetings
@@ -179,7 +180,8 @@ export const useDataStore = create<DataState>((set, get) => ({
 
   // Absences
   createAbsence: (a) => { const created = absenceQueries.create(a); activityQueries.log('absence', created.id, created.resourceName, 'absence-added', `${created.type}: ${created.startDate} — ${created.endDate}`); get().loadAbsences(); get().loadActivity(); return created; },
-  deleteAbsence: (id) => { absenceQueries.delete(id); get().loadAbsences(); },
+  updateAbsence: (id, u) => { const updated = absenceQueries.update(id, u); if (updated) activityQueries.log('absence', id, updated.resourceName, 'absence-updated', `${updated.type}: ${updated.startDate} — ${updated.endDate}`); get().loadAbsences(); get().loadActivity(); },
+  deleteAbsence: (id) => { absenceQueries.delete(id); get().loadAbsences(); get().loadActivity(); },
 
   // Meetings
   createMeeting: (m) => { const created = meetingQueries.create(m); activityQueries.log('meeting', created.id, created.title, 'created'); get().loadMeetings(); get().loadActivity(); return created; },
