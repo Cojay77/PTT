@@ -150,24 +150,43 @@ export default function Sidebar() {
   return (
     <nav className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
       {/* Header */}
-      <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <LayoutDashboard />
-        </div>
-        {!sidebarCollapsed && (
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="sidebar-project-name truncate" title={projectName}>{projectName}</div>
-            {projectCode && <div className="sidebar-project-code">{projectCode}</div>}
-          </div>
+      <div className="sidebar-header" style={sidebarCollapsed ? { justifyContent: 'center', padding: '10px 8px' } : undefined}>
+        {sidebarCollapsed ? (
+          <button
+            className="btn-icon btn-ghost"
+            style={{
+              color: 'var(--text-sidebar-active)',
+              background: 'var(--bg-sidebar-hover)',
+              width: 36,
+              height: 36,
+              borderRadius: 'var(--radius-md)',
+            }}
+            onClick={() => setSidebarCollapsed(false)}
+            title="Expand sidebar"
+            id="sidebar-expand-btn"
+          >
+            <ChevronRight size={18} />
+          </button>
+        ) : (
+          <>
+            <div className="sidebar-logo">
+              <LayoutDashboard />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="sidebar-project-name truncate" title={projectName}>{projectName}</div>
+              {projectCode && <div className="sidebar-project-code">{projectCode}</div>}
+            </div>
+            <button
+              className="btn-icon btn-ghost"
+              style={{ color: 'var(--text-sidebar)', flexShrink: 0 }}
+              onClick={() => setSidebarCollapsed(true)}
+              title="Collapse sidebar"
+              id="sidebar-collapse-btn"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </>
         )}
-        <button
-          className="btn-icon btn-ghost"
-          style={{ color: 'var(--text-sidebar)', flexShrink: 0 }}
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </button>
       </div>
 
       {/* Quick Capture */}

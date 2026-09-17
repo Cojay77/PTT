@@ -1,7 +1,12 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, Bell, Sun, Moon, Save, Download } from 'lucide-react';
+import {
+  Search, Bell, Sun, Moon, Save, Download, PanelLeftClose, PanelLeftOpen,
+  AlertCircle, AlertTriangle, Info, CheckCircle2, X, ArrowRight
+} from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
+import { useDataStore } from '../../store/useDataStore';
+import { useTaskStore } from '../../store/useTaskStore';
 import { saveDbNow, exportDatabase } from '../../db';
 import { format } from 'date-fns';
 
@@ -29,12 +34,30 @@ const PAGE_TITLES: Record<string, string> = {
   '/settings': 'Settings',
 };
 
+interface LiveAlert {
+  id: string;
+  level: 'critical' | 'warning' | 'info';
+  category: string;
+  title: string;
+  description: string;
+  link: string;
+}
+
 export default function TopBar() {
-  const { theme, toggleTheme, setSearchOpen, alerts } = useUIStore();
+  const { theme, toggleTheme, setSearchOpen, sidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const tasks = useTaskStore((s) => s.tasks);
+  const { risks, issues, decisions, actions, communications } = useDataStore();
+
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const alertsRef = useRef<HTMLDivElement>(null);
+
   const title = PAGE_TITLES[location.pathname] || 'Project Tracking Tool';
-  const criticalAlerts = alerts.filter(a => !a.isDismissed && a.level === 'critical').length;
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
+  const todayIso = new Date().toISOString().split('T')[0];
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -47,22 +70,188 @@ export default function TopBar() {
       e.preventDefault();
       setSearchOpen(true);
     }
-  }, []);
+    if (e.key === 'Escape') {
+      setAlertsOpen(false);
+    }
+  }, [setSearchOpen]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Click outside to close alerts popover
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (alertsRef.current && !alertsRef.current.contains(event.target as Node)) {
+        setAlertsOpen(false);
+      }
+    }
+    if (alertsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [alertsOpen]);
+
+  // Reactively calculate live alerts
+  const activeAlerts = useMemo(() => {
+    const list: LiveAlert[] = [];
+
+    // Critical Issues
+    issues.forEach((i) => {
+      if (['open', 'in-progress', 'escalated'].includes(i.status)) {
+        if (i.severity === 'critical') {
+          list.push({
+            id: `issue-${i.id}`,
+            level: 'critical',
+            category: 'Issue',
+            title: `Critical Blocker: ${i.title}`,
+            description: i.impact || i.resolutionActions || 'Requires immediate resolution',
+            link: '/issues',
+          });
+        } else if (i.severity === 'high') {
+          list.push({
+            id: `issue-${i.id}`,
+            level: 'warning',
+            category: 'Issue',
+            title: `High Issue: ${i.title}`,
+            description: i.impact || 'In progress',
+            link: '/issues',
+          });
+        }
+      }
+    });
+
+    // Critical & High Risks
+    risks.forEach((r) => {
+      if (!['closed', 'accepted'].includes(r.status)) {
+        if (r.severity === 'critical') {
+          list.push({
+            id: `risk-${r.id}`,
+            level: 'critical',
+            category: 'Risk',
+            title: `Critical Risk: ${r.title}`,
+            description: r.mitigationStrategy ? `Mitigation: ${r.mitigationStrategy}` : 'Assessment needed',
+            link: '/risks',
+          });
+        } else if (r.severity === 'high') {
+          list.push({
+            id: `risk-${r.id}`,
+            level: 'warning',
+            category: 'Risk',
+            title: `High Risk: ${r.title}`,
+            description: r.mitigationStrategy || 'Under review',
+            link: '/risks',
+          });
+        }
+      }
+    });
+
+    // Overdue Tasks
+    tasks.forEach((t) => {
+      if (!t.isBacklog && t.dueDate && t.dueDate < todayIso && !['done', 'cancelled'].includes(t.status)) {
+        list.push({
+          id: `task-overdue-${t.id}`,
+          level: 'critical',
+          category: 'Task',
+          title: `Overdue Task: ${t.title}`,
+          description: `Due on ${t.dueDate} · Owner: ${t.owner || 'Unassigned'}`,
+          link: '/tasks',
+        });
+      } else if (!t.isBacklog && t.status === 'blocked') {
+        list.push({
+          id: `task-blocked-${t.id}`,
+          level: 'warning',
+          category: 'Task',
+          title: `Blocked Task: ${t.title}`,
+          description: t.blockingReason || 'Task is currently blocked',
+          link: '/tasks',
+        });
+      }
+    });
+
+    // Decisions requiring action
+    decisions.forEach((d) => {
+      if (d.status === 'decision-required') {
+        list.push({
+          id: `decision-${d.id}`,
+          level: 'warning',
+          category: 'Decision',
+          title: `Decision Required: ${d.title}`,
+          description: d.deadline ? `Deadline: ${d.deadline}` : (d.decisionRequired || 'Pending review'),
+          link: '/decisions',
+        });
+      }
+    });
+
+    // Communications overdue
+    communications.forEach((c) => {
+      if (c.status === 'awaiting-response' && c.expectedResponseDate && c.expectedResponseDate < todayIso) {
+        list.push({
+          id: `comm-${c.id}`,
+          level: 'warning',
+          category: 'Communication',
+          title: `Awaiting Response: ${c.subject}`,
+          description: `Expected from ${c.recipients || 'stakeholder'} by ${c.expectedResponseDate}`,
+          link: '/communications',
+        });
+      }
+    });
+
+    // Overdue actions
+    actions.forEach((a) => {
+      if (a.dueDate && a.dueDate < todayIso && !['done', 'cancelled'].includes(a.status)) {
+        list.push({
+          id: `action-${a.id}`,
+          level: 'warning',
+          category: 'Action',
+          title: `Overdue Action: ${a.action}`,
+          description: `Due on ${a.dueDate} · Owner: ${a.owner || 'Unassigned'}`,
+          link: '/actions',
+        });
+      }
+    });
+
+    return list.filter((item) => !dismissedIds.has(item.id));
+  }, [tasks, risks, issues, decisions, actions, communications, todayIso, dismissedIds]);
+
+  const criticalCount = activeAlerts.filter((a) => a.level === 'critical').length;
+  const totalAlerts = activeAlerts.length;
+
+  function dismissOne(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    setDismissedIds((prev) => new Set([...prev, id]));
+  }
+
+  function dismissAll() {
+    setDismissedIds((prev) => new Set([...prev, ...activeAlerts.map((a) => a.id)]));
+  }
+
   return (
     <header className="topbar">
-      <div className="flex-1 min-w-0">
-        <h1 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-          {title}
-        </h1>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 1 }}>{today}</p>
+      {/* Left section: Sidebar toggle + Page title */}
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <button
+          className="btn-icon btn-ghost"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{ color: 'var(--text-sidebar-active)', flexShrink: 0 }}
+          id="topbar-sidebar-toggle"
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
+
+        <div className="min-w-0">
+          <h1 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', margin: 0 }}>
+            {title}
+          </h1>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, marginTop: 1 }}>{today}</p>
+        </div>
       </div>
 
+      {/* Right controls */}
       <div className="flex items-center gap-2">
         {/* Search */}
         <button
@@ -76,25 +265,171 @@ export default function TopBar() {
           <span style={{ fontSize: 10, color: 'var(--text-placeholder)', marginLeft: 8, fontFamily: 'var(--font-mono)' }}>⌘/</span>
         </button>
 
-        {/* Alerts bell */}
-        <div className="tooltip-wrapper">
-          <button className="btn-icon btn-ghost" style={{ position: 'relative' }} title="Alerts">
+        {/* Alerts Bell + Popover */}
+        <div className="tooltip-wrapper" ref={alertsRef}>
+          <button
+            className="btn-icon btn-ghost"
+            style={{
+              position: 'relative',
+              background: alertsOpen ? 'var(--bg-hover)' : undefined,
+              color: criticalCount > 0 ? 'var(--danger)' : undefined,
+            }}
+            onClick={() => setAlertsOpen(!alertsOpen)}
+            title="Alerts & Notifications"
+            id="topbar-alerts-btn"
+          >
             <Bell size={16} />
-            {criticalAlerts > 0 && (
-              <span style={{
-                position: 'absolute', top: 4, right: 4,
-                width: 8, height: 8, borderRadius: '50%',
-                background: 'var(--danger)',
-                animation: 'pulse-ring 2s infinite',
-              }} />
-            )}
+            {criticalCount > 0 ? (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 'var(--radius-full)',
+                  background: 'var(--danger)',
+                  color: 'white',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                  boxShadow: '0 0 0 2px var(--bg-surface)',
+                }}
+              >
+                {criticalCount}
+              </span>
+            ) : totalAlerts > 0 ? (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 'var(--radius-full)',
+                  background: 'var(--warning)',
+                  color: 'hsl(38, 80%, 15%)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                  boxShadow: '0 0 0 2px var(--bg-surface)',
+                }}
+              >
+                {totalAlerts}
+              </span>
+            ) : null}
           </button>
-          <div className="tooltip">Alerts ({criticalAlerts} critical)</div>
+          {!alertsOpen && (
+            <div className="tooltip">
+              {totalAlerts > 0
+                ? `${totalAlerts} active alert${totalAlerts > 1 ? 's' : ''} (${criticalCount} critical)`
+                : 'Alerts (All clear)'}
+            </div>
+          )}
+
+          {/* Alerts Dropdown Popover */}
+          {alertsOpen && (
+            <div className="alerts-popover">
+              <div className="alerts-header">
+                <div className="flex items-center gap-2">
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>Alerts & Notifications</span>
+                  <span
+                    className={`badge ${criticalCount > 0 ? 'status-blocked' : 'badge-info'}`}
+                    style={{ fontSize: 10, padding: '2px 6px' }}
+                  >
+                    {totalAlerts} active
+                  </span>
+                </div>
+                {totalAlerts > 0 && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, padding: '2px 6px', height: 'auto' }}
+                    onClick={dismissAll}
+                  >
+                    Dismiss all
+                  </button>
+                )}
+              </div>
+
+              <div className="alerts-list">
+                {activeAlerts.length > 0 ? (
+                  activeAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={`alert-item ${alert.level}`}
+                      onClick={() => {
+                        navigate(alert.link);
+                        setAlertsOpen(false);
+                      }}
+                    >
+                      <div className={`alert-badge-icon ${alert.level}`}>
+                        {alert.level === 'critical' ? (
+                          <AlertCircle size={15} />
+                        ) : alert.level === 'warning' ? (
+                          <AlertTriangle size={15} />
+                        ) : (
+                          <Info size={15} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }} className="truncate">
+                          {alert.title}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                          {alert.description}
+                        </div>
+                      </div>
+                      <button
+                        className="btn-icon btn-ghost"
+                        style={{ width: 22, height: 22, padding: 0, opacity: 0.6, flexShrink: 0 }}
+                        onClick={(e) => dismissOne(e, alert.id)}
+                        title="Dismiss"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <CheckCircle2 size={32} color="var(--success)" style={{ margin: '0 auto 8px auto' }} />
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>All Clear!</div>
+                    <div style={{ fontSize: 11, marginTop: 4 }}>No active blockers or overdue items requiring attention.</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="alerts-footer">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: 0 }}
+                  onClick={() => {
+                    navigate('/raid');
+                    setAlertsOpen(false);
+                  }}
+                >
+                  Open RAID View <ArrowRight size={11} style={{ marginLeft: 4 }} />
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: 11, height: 24, padding: '0 8px' }}
+                  onClick={() => setAlertsOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Save */}
         <div className="tooltip-wrapper">
-          <button className="btn-icon btn-ghost" onClick={saveDbNow} title="Save now">
+          <button className="btn-icon btn-ghost" onClick={saveDbNow} title="Save now" id="topbar-save-btn">
             <Save size={16} />
           </button>
           <div className="tooltip">Save database</div>
@@ -102,18 +437,18 @@ export default function TopBar() {
 
         {/* Export */}
         <div className="tooltip-wrapper">
-          <button className="btn-icon btn-ghost" onClick={exportDatabase} title="Export backup">
+          <button className="btn-icon btn-ghost" onClick={exportDatabase} title="Export backup" id="topbar-export-btn">
             <Download size={16} />
           </button>
-          <div className="tooltip">Export database backup</div>
+          <div className="tooltip">Export database backup (.db)</div>
         </div>
 
         {/* Theme toggle */}
         <div className="tooltip-wrapper">
-          <button className="btn-icon btn-ghost" onClick={toggleTheme} title="Toggle theme">
+          <button className="btn-icon btn-ghost" onClick={toggleTheme} title="Toggle theme" id="topbar-theme-btn">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
-          <div className="tooltip">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</div>
+          <div className="tooltip">{theme === 'dark' ? 'Switch to Light mode' : 'Switch to Dark mode'}</div>
         </div>
       </div>
     </header>
