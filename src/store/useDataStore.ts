@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog } from '../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig } from '../types';
 import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries, actionQueries,
   communicationQueries, stakeholderQueries, resourceQueries, absenceQueries,
-  meetingQueries, noteQueries, activityQueries,
+  meetingQueries, noteQueries, activityQueries, projectConfigQueries,
 } from '../db/queries';
 
 interface DataState {
+  projectConfig: ProjectConfig | null;
   milestones: Milestone[];
   risks: Risk[];
   issues: Issue[];
@@ -22,6 +23,8 @@ interface DataState {
   isLoaded: boolean;
 
   loadAll: () => void;
+  loadProjectConfig: () => void;
+  updateProjectConfig: (data: Record<string, string>) => void;
   loadMilestones: () => void;
   loadRisks: () => void;
   loadIssues: () => void;
@@ -91,12 +94,14 @@ interface DataState {
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
+  projectConfig: null,
   milestones: [], risks: [], issues: [], decisions: [], actions: [],
   communications: [], stakeholders: [], resources: [], absences: [],
   meetings: [], notes: [], activityLog: [], isLoaded: false,
 
   loadAll: () => {
     set({
+      projectConfig: projectConfigQueries.get(),
       milestones: milestoneQueries.getAll(),
       risks: riskQueries.getAll(),
       issues: issueQueries.getAll(),
@@ -113,6 +118,12 @@ export const useDataStore = create<DataState>((set, get) => ({
     });
   },
 
+  loadProjectConfig: () => set({ projectConfig: projectConfigQueries.get() }),
+  updateProjectConfig: (data) => {
+    projectConfigQueries.upsert(data);
+    get().loadProjectConfig();
+    get().loadActivity();
+  },
   loadMilestones: () => set({ milestones: milestoneQueries.getAll() }),
   loadRisks: () => set({ risks: riskQueries.getAll() }),
   loadIssues: () => set({ issues: issueQueries.getAll() }),

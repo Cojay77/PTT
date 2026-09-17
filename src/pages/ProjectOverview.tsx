@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Save, Edit3 } from 'lucide-react';
+import { useDataStore } from '../store/useDataStore';
 import { projectConfigQueries } from '../db/queries';
 import { saveDbNow } from '../db';
 
@@ -43,8 +44,10 @@ export default function ProjectOverview() {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const { updateProjectConfig } = useDataStore();
+
   function handleSave() {
-    projectConfigQueries.upsert(form);
+    updateProjectConfig(form);
     saveDbNow();
     setSaved(true);
     setEditing(false);

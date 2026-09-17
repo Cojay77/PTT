@@ -1,16 +1,19 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, ListTodo, Milestone, MessageSquare,
-  Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale, ClipboardList,
+  Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale,
   CalendarCheck, Shield, BookOpen, BarChart3, ClipboardCheck, GitBranch,
   HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
 import { useTaskStore } from '../../store/useTaskStore';
-import { taskQueries } from '../../db/queries/tasks';
-import { issueQueries, decisionQueries, actionQueries, communicationQueries } from '../../db/queries';
-import { projectConfigQueries } from '../../db/queries';
+
+interface BadgeInfo {
+  count: number;
+  level: 'danger' | 'warning' | 'info';
+}
 
 const navGroups = [
   {
@@ -32,14 +35,14 @@ const navGroups = [
   {
     label: 'Planning',
     items: [
-      { path: '/milestones', icon: Milestone, label: 'Milestones' },
+      { path: '/milestones', icon: Milestone, label: 'Milestones', badge: 'milestones' },
       { path: '/timeline', icon: GitBranch, label: 'Timeline' },
     ],
   },
   {
     label: 'Control',
     items: [
-      { path: '/raid', icon: Shield, label: 'RAID View' },
+      { path: '/raid', icon: Shield, label: 'RAID View', badge: 'raid' },
       { path: '/risks', icon: AlertTriangle, label: 'Risks', badge: 'risks' },
       { path: '/issues', icon: Zap, label: 'Issues', badge: 'issues' },
       { path: '/decisions', icon: Scale, label: 'Decisions', badge: 'decisions' },
@@ -71,39 +74,77 @@ const navGroups = [
   },
 ];
 
-function useBadgeCounts() {
-  const today = new Date().toISOString().split('T')[0];
-  const overdueTasks = taskQueries.getOverdue().length;
-  const blockedTasks = taskQueries.getBlocked().length;
-  const openIssues = issueQueries.getOpen().length;
-  const pendingDecisions = decisionQueries.getPending().length;
-  const overdueActions = actionQueries.getOverdue().length;
-  const overdueComms = communicationQueries.getOverdueResponses().length;
-  const openRisks = issueQueries.getOpen().filter(i => i.severity === 'critical' || i.severity === 'high').length;
-  return { overdueTasks, blockedTasks, openIssues, pendingDecisions, overdueActions, overdueComms, openRisks };
-}
-
 export default function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed, setQuickCaptureOpen } = useUIStore();
-  const badges = useBadgeCounts();
+  const tasks = useTaskStore((s) => s.tasks);
+  const { risks, issues, decisions, actions, communications, milestones, projectConfig } = useDataStore();
 
-  const config = projectConfigQueries.get();
-  const projectName = (config?.name as string) || 'New Project';
-  const projectCode = (config?.code as string) || '';
+  const today = new Date().toISOString().split('T')[0];
 
-  function getBadge(badge?: string) {
-    if (!badge) return null;
-    const counts: Record<string, number> = {
-      tasks: badges.overdueTasks + badges.blockedTasks,
-      actions: badges.overdueActions,
-      risks: badges.openRisks,
-      issues: badges.openIssues,
-      decisions: badges.pendingDecisions,
-      comms: badges.overdueComms,
-    };
-    const count = counts[badge] || 0;
-    if (!count) return null;
-    return count;
+  // Reactively calculate notification badges based on live store data
+  const badges = useMemo(() => {
+    const activeTasks = tasks.filter((t) => !t.isBacklog);
+    const overdueTasks = activeTasks.filter(
+      (t) => t.dueDate && t.dueDate < today && !['done', 'cancelled'].includes(t.status)
+    ).length;
+    const blockedTasks = activeTasks.filter((t) => t.status === 'blocked').length;
+    const tasksCount = overdueTasks + blockedTasks;
+
+    // Active high or critical risks that are not resolved/closed/accepted
+    const openRisks = risks.filter(
+      (r) => !['closed', 'accepted'].includes(r.status) && (r.severity === 'critical' || r.severity === 'high')
+    ).length;
+
+    // Active issues (not resolved or closed)
+    const openIssues = issues.filter(
+      (i) => ['open', 'in-progress', 'escalated'].includes(i.status)
+    ).length;
+
+    // Pending decisions (proposed, under-discussion, decision-required)
+    // When resolved (approved, rejected, superseded), count decreases immediately!
+    const pendingDecisions = decisions.filter(
+      (d) => ['proposed', 'under-discussion', 'decision-required'].includes(d.status)
+    ).length;
+
+    // Overdue open actions
+    const overdueActions = actions.filter(
+      (a) => a.dueDate && a.dueDate < today && !['done', 'cancelled'].includes(a.status)
+    ).length;
+
+    // Overdue communication responses or follow-ups
+    const overdueComms = communications.filter(
+      (c) =>
+        (c.status === 'awaiting-response' && c.expectedResponseDate && c.expectedResponseDate < today) ||
+        (c.followUpRequired && !['closed', 'response-received'].includes(c.status) && c.nextFollowUpDate && c.nextFollowUpDate < today)
+    ).length;
+
+    // Delayed or at-risk milestones
+    const delayedMilestones = milestones.filter(
+      (m) => m.status === 'delayed' || m.status === 'at-risk'
+    ).length;
+
+    // RAID combined alert count
+    const raidAlerts = openRisks + openIssues + pendingDecisions;
+
+    const map: Record<string, BadgeInfo> = {};
+    if (tasksCount > 0) map.tasks = { count: tasksCount, level: 'danger' };
+    if (openRisks > 0) map.risks = { count: openRisks, level: 'danger' };
+    if (openIssues > 0) map.issues = { count: openIssues, level: 'danger' };
+    if (pendingDecisions > 0) map.decisions = { count: pendingDecisions, level: 'warning' };
+    if (overdueActions > 0) map.actions = { count: overdueActions, level: 'warning' };
+    if (overdueComms > 0) map.comms = { count: overdueComms, level: 'warning' };
+    if (delayedMilestones > 0) map.milestones = { count: delayedMilestones, level: 'warning' };
+    if (raidAlerts > 0) map.raid = { count: raidAlerts, level: 'danger' };
+
+    return map;
+  }, [tasks, risks, issues, decisions, actions, communications, milestones, today]);
+
+  const projectName = projectConfig?.name || 'Customer Portal Migration';
+  const projectCode = projectConfig?.code || 'CPM-2026';
+
+  function getBadge(badgeKey?: string): BadgeInfo | null {
+    if (!badgeKey) return null;
+    return badges[badgeKey] ?? null;
   }
 
   return (
@@ -115,7 +156,7 @@ export default function Sidebar() {
         </div>
         {!sidebarCollapsed && (
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="sidebar-project-name">{projectName}</div>
+            <div className="sidebar-project-name truncate" title={projectName}>{projectName}</div>
             {projectCode && <div className="sidebar-project-code">{projectCode}</div>}
           </div>
         )}
@@ -165,16 +206,25 @@ export default function Sidebar() {
                     <>
                       <span>{item.label}</span>
                       {badge ? (
-                        <span className={`nav-badge ${badge > 0 ? '' : ''}`}>{badge}</span>
+                        <span className={`nav-badge ${badge.level === 'warning' ? 'warning' : ''}`}>
+                          {badge.count}
+                        </span>
                       ) : null}
                     </>
                   )}
                   {sidebarCollapsed && badge ? (
-                    <span style={{
-                      position: 'absolute', right: 4, top: 4,
-                      width: 8, height: 8, borderRadius: '50%',
-                      background: 'var(--danger)'
-                    }} />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: 4,
+                        top: 4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: badge.level === 'warning' ? 'var(--warning)' : 'var(--danger)',
+                      }}
+                      title={`${item.label}: ${badge.count}`}
+                    />
                   ) : null}
                 </NavLink>
               );
