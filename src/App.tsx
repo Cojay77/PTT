@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initDatabase } from './db';
-import { hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty, seedChangeRequestsIfEmpty } from './data/demoData';
+import {
+  hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty,
+  seedChangeRequestsIfEmpty, seedStakeholderAbsencesIfEmpty
+} from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
 import Layout from './components/layout/Layout';
@@ -48,6 +51,7 @@ export default function App() {
         seedWeeklyReviewsIfEmpty();
         seedBudgetIfEmpty();
         seedChangeRequestsIfEmpty();
+        seedStakeholderAbsencesIfEmpty();
         loadTasks();
         loadAll();
         setDbReady(true);

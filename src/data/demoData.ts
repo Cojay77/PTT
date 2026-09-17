@@ -397,3 +397,47 @@ export function seedChangeRequestsIfEmpty(): void {
     console.error('Failed to seed change requests:', err);
   }
 }
+
+export function seedStakeholderAbsencesIfEmpty(): void {
+  try {
+    const allAbsences = absenceQueries.getAll();
+    const allStakeholders = stakeholderQueries.getAll();
+    if (allStakeholders.length === 0) return;
+
+    const hasStakeholderAbsence = allAbsences.some(a =>
+      allStakeholders.some(s => s.id === a.resourceId)
+    );
+
+    if (!hasStakeholderAbsence) {
+      const claire = allStakeholders.find(s => s.name.includes('Claire Fontaine')) || allStakeholders[0];
+      const today = new Date();
+      // Claire Fontaine away Sept 27 to Oct 03 (overlapping with Sept 30 MVP milestone!)
+      const s1Start = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 10);
+      const s1End = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 16);
+      absenceQueries.create({
+        resourceId: claire.id,
+        resourceName: claire.name,
+        type: 'vacation',
+        startDate: s1Start.toISOString().split('T')[0],
+        endDate: s1End.toISOString().split('T')[0],
+        notes: 'Executive retreat & annual leave — Steering Committee sign-off delegate: Marc Lefort',
+      });
+
+      const marc = allStakeholders.find(s => s.name.includes('Marc Lefort'));
+      if (marc) {
+        const s2Start = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3);
+        const s2End = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 5);
+        absenceQueries.create({
+          resourceId: marc.id,
+          resourceName: marc.name,
+          type: 'business-trip',
+          startDate: s2Start.toISOString().split('T')[0],
+          endDate: s2End.toISOString().split('T')[0],
+          notes: 'Paris Tech Summit — available via mobile for emergencies',
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to seed stakeholder absences:', err);
+  }
+}

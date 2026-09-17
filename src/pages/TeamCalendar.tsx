@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Users, Clock,
   Search, Filter, Trash2, Edit2, AlertCircle, CheckCircle2, X, ArrowUpDown,
-  UserCheck, UserX, Briefcase
+  UserCheck, UserX, Briefcase, Flag, AlertTriangle, ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { Avatar, Modal, EmptyState } from '../components/ui/shared';
@@ -11,7 +11,7 @@ import {
   isWithinInterval, addMonths, subMonths, isWeekend, startOfWeek, endOfWeek,
   differenceInCalendarDays
 } from 'date-fns';
-import type { Absence, Resource } from '../types';
+import type { Absence, Resource, Stakeholder, Milestone } from '../types';
 
 export const ABSENCE_TYPES = [
   { value: 'vacation', label: 'Vacation / Annual Leave', color: '#4f8ef7', short: 'VAC' },
@@ -320,8 +320,210 @@ function AbsenceModal({
   );
 }
 
+interface StakeholderAbsenceModalProps {
+  absence: Absence | null;
+  initialStakeholderId?: string;
+  initialDate?: string;
+  stakeholders: Stakeholder[];
+  onClose: () => void;
+  onSave: (data: Partial<Absence>) => void;
+  onDelete?: (id: string) => void;
+}
+
+function StakeholderAbsenceModal({
+  absence,
+  initialStakeholderId,
+  initialDate,
+  stakeholders,
+  onClose,
+  onSave,
+  onDelete,
+}: StakeholderAbsenceModalProps) {
+  const isEdit = !!absence;
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const defaultDate = initialDate || todayStr;
+
+  const [stakeholderId, setStakeholderId] = useState<string>(
+    absence?.resourceId || initialStakeholderId || (stakeholders[0]?.id ?? '')
+  );
+  const [type, setType] = useState<string>(absence?.type || 'vacation');
+  const [startDate, setStartDate] = useState<string>(absence?.startDate || defaultDate);
+  const [endDate, setEndDate] = useState<string>(absence?.endDate || defaultDate);
+  const [notes, setNotes] = useState<string>(absence?.notes || '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const duration = useMemo(() => calculateDays(startDate, endDate), [startDate, endDate]);
+
+  function handleStartDateChange(val: string) {
+    setStartDate(val);
+    if (!endDate || endDate < val) {
+      setEndDate(val);
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!stakeholderId) {
+      setError('Please select a stakeholder.');
+      return;
+    }
+    if (!startDate) {
+      setError('Please specify a start date.');
+      return;
+    }
+    if (endDate && endDate < startDate) {
+      setError('End date cannot be earlier than start date.');
+      return;
+    }
+
+    const stk = stakeholders.find(s => s.id === stakeholderId);
+    onSave({
+      resourceId: stakeholderId,
+      resourceName: stk ? stk.name : '',
+      type,
+      startDate,
+      endDate,
+      notes,
+    });
+    onClose();
+  }
+
+  return (
+    <Modal
+      title={isEdit ? 'Edit Stakeholder Absence' : 'Log Stakeholder Absence / Leave'}
+      onClose={onClose}
+      footer={
+        <div className="flex items-center justify-between w-full">
+          {isEdit && onDelete ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>Delete?</span>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: 'var(--danger)', color: 'white' }}
+                  onClick={() => { onDelete(absence.id); onClose(); }}
+                >
+                  Yes, Delete
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{ color: 'var(--danger)' }}
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 size={14} /> Delete
+              </button>
+            )
+          ) : <div />}
+
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={handleSubmit}>
+              {isEdit ? 'Save Changes' : 'Record Absence'}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {error && (
+          <div className="alert-banner" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+            <AlertCircle size={15} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label">Stakeholder / Decision Maker *</label>
+          <select
+            className="select"
+            value={stakeholderId}
+            onChange={e => setStakeholderId(e.target.value)}
+            disabled={isEdit}
+          >
+            {stakeholders.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name} — {s.role} ({s.organization})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Absence Type</label>
+          <select className="select" value={type} onChange={e => setType(e.target.value)}>
+            <option value="vacation">Vacation / Annual Leave</option>
+            <option value="business-trip">Business Trip / Summit / Offsite</option>
+            <option value="training">Training / Conference</option>
+            <option value="remote">Out of Office / Telework</option>
+            <option value="other">Other Unavailability</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">Start Date *</label>
+            <input
+              type="date"
+              className="input"
+              value={startDate}
+              onChange={e => handleStartDateChange(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">End Date *</label>
+            <input
+              type="date"
+              className="input"
+              value={endDate}
+              min={startDate}
+              onChange={e => setEndDate(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        {startDate && endDate && (
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Duration: <strong>{duration.businessDays} business days</strong> ({duration.totalDays} calendar days)
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label">Milestone Delegation / Coverage Notes</label>
+          <textarea
+            className="textarea"
+            rows={2}
+            placeholder="e.g. Steering committee delegate: Marc Lefort (IT Director). Escalations by phone."
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function TeamCalendar() {
-  const { resources, absences, createAbsence, updateAbsence, deleteAbsence } = useDataStore();
+  const {
+    resources, absences, stakeholders, milestones,
+    createAbsence, updateAbsence, deleteAbsence
+  } = useDataStore();
+
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [view, setView] = useState<'team' | 'month' | 'list'>('team');
   const [showWeekends, setShowWeekends] = useState(false);
@@ -331,11 +533,31 @@ export default function TeamCalendar() {
   const [filterResource, setFilterResource] = useState('all');
   const [filterType, setFilterType] = useState('all');
 
-  // Modal State
+  // Modal State for Team
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
   const [modalInitialResource, setModalInitialResource] = useState<string | undefined>(undefined);
   const [modalInitialDate, setModalInitialDate] = useState<string | undefined>(undefined);
+
+  // Modal State for Stakeholders
+  const [isStakeholderModalOpen, setIsStakeholderModalOpen] = useState(false);
+  const [editingStakeholderAbsence, setEditingStakeholderAbsence] = useState<Absence | null>(null);
+  const [modalStakeholderId, setModalStakeholderId] = useState<string | undefined>(undefined);
+  const [modalStakeholderDate, setModalStakeholderDate] = useState<string | undefined>(undefined);
+
+  function handleOpenStakeholderCreate(stakeholderId?: string, date?: string) {
+    setEditingStakeholderAbsence(null);
+    setModalStakeholderId(stakeholderId);
+    setModalStakeholderDate(date);
+    setIsStakeholderModalOpen(true);
+  }
+
+  function handleOpenStakeholderEdit(abs: Absence) {
+    setEditingStakeholderAbsence(abs);
+    setModalStakeholderId(abs.resourceId);
+    setModalStakeholderDate(abs.startDate);
+    setIsStakeholderModalOpen(true);
+  }
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -343,6 +565,18 @@ export default function TeamCalendar() {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  // Separate team absences from stakeholder absences
+  const teamResourceIds = useMemo(() => new Set(resources.map(r => r.id)), [resources]);
+  const stakeholderIds = useMemo(() => new Set(stakeholders.map(s => s.id)), [stakeholders]);
+
+  const teamAbsences = useMemo(() => {
+    return absences.filter(a => teamResourceIds.has(a.resourceId));
+  }, [absences, teamResourceIds]);
+
+  const stakeholderAbsences = useMemo(() => {
+    return absences.filter(a => stakeholderIds.has(a.resourceId));
+  }, [absences, stakeholderIds]);
 
   // Filtered resources
   const displayedResources = useMemo(() => {
@@ -357,9 +591,9 @@ export default function TeamCalendar() {
     return list;
   }, [resources, filterResource, searchQuery]);
 
-  // Filtered absences
+  // Filtered absences for Team Calendar
   const filteredAbsences = useMemo(() => {
-    return absences.filter(a => {
+    return teamAbsences.filter(a => {
       if (filterResource !== 'all' && a.resourceId !== filterResource) return false;
       if (filterType !== 'all' && a.type !== filterType) return false;
       if (searchQuery.trim()) {
@@ -371,7 +605,80 @@ export default function TeamCalendar() {
       }
       return true;
     });
-  }, [absences, filterResource, filterType, searchQuery]);
+  }, [teamAbsences, filterResource, filterType, searchQuery]);
+
+  // Milestones mapped by date (yyyy-MM-dd)
+  const milestonesByDate = useMemo(() => {
+    const map: Record<string, Milestone[]> = {};
+    milestones.forEach(m => {
+      if (!m.targetDate) return;
+      if (!map[m.targetDate]) map[m.targetDate] = [];
+      map[m.targetDate].push(m);
+    });
+    return map;
+  }, [milestones]);
+
+  // Milestones in current month
+  const monthMilestones = useMemo(() => {
+    return milestones.filter(m => {
+      if (!m.targetDate) return false;
+      try {
+        const d = parseISO(m.targetDate);
+        return isWithinInterval(d, { start: monthStart, end: monthEnd });
+      } catch {
+        return false;
+      }
+    });
+  }, [milestones, monthStart, monthEnd]);
+
+  // Stakeholder Absences vs Milestone Scheduling Conflicts
+  const stakeholderMilestoneConflicts = useMemo(() => {
+    const conflicts: Array<{
+      milestone: Milestone;
+      stakeholder: Stakeholder;
+      absence: Absence;
+      dateStr: string;
+    }> = [];
+
+    stakeholders.forEach(stk => {
+      const stkAbs = stakeholderAbsences.filter(a => a.resourceId === stk.id);
+      stkAbs.forEach(abs => {
+        try {
+          const start = parseISO(abs.startDate);
+          const end = parseISO(abs.endDate);
+          const days = eachDayOfInterval({ start, end });
+          days.forEach(day => {
+            const dStr = format(day, 'yyyy-MM-dd');
+            const msList = milestonesByDate[dStr];
+            if (msList && msList.length > 0) {
+              msList.forEach(m => {
+                conflicts.push({
+                  milestone: m,
+                  stakeholder: stk,
+                  absence: abs,
+                  dateStr: dStr,
+                });
+              });
+            }
+          });
+        } catch {}
+      });
+    });
+
+    return conflicts;
+  }, [stakeholders, stakeholderAbsences, milestonesByDate]);
+
+  // Helper: Absences for a stakeholder on a specific day
+  function getAbsencesForStakeholderDay(stakeholderId: string, day: Date): Absence[] {
+    return stakeholderAbsences.filter(a => {
+      if (a.resourceId !== stakeholderId) return false;
+      try {
+        return isWithinInterval(day, { start: parseISO(a.startDate), end: parseISO(a.endDate) });
+      } catch {
+        return false;
+      }
+    });
+  }
 
   // Helper: Absences for a resource on a specific day
   function getAbsencesForResourceDay(resourceId: string, day: Date): Absence[] {
@@ -1243,7 +1550,327 @@ export default function TeamCalendar() {
         </div>
       </div>
 
-      {/* Absence Modal (Create & Edit) */}
+      {/* ============================================================
+          SECTION 2: Stakeholders Calendar & Milestone Guard
+          ============================================================ */}
+      <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Section Header */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={18} color="var(--accent)" />
+              <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                Stakeholders Calendar & Milestone Guard
+              </h2>
+              <span className="badge badge-neutral" style={{ fontSize: 10 }}>
+                {stakeholders.length} Key Stakeholders
+              </span>
+            </div>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, marginTop: 4 }}>
+              High-level availability of key business owners and decision-makers. Detects scheduling conflicts during critical milestone gates and sign-offs.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              className="btn btn-secondary btn-sm flex items-center gap-1.5"
+              onClick={() => handleOpenStakeholderCreate()}
+            >
+              <Plus size={14} /> Log Stakeholder Leave
+            </button>
+          </div>
+        </div>
+
+        {/* Milestone Conflict Alert Banner */}
+        {stakeholderMilestoneConflicts.length > 0 ? (
+          <div
+            className="alert-banner"
+            style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              borderColor: 'var(--danger)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 16px',
+            }}
+          >
+            <AlertTriangle size={20} color="var(--danger)" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 13, marginBottom: 4 }}>
+                ⚠️ Milestone Availability Conflict Detected ({stakeholderMilestoneConflicts.length})
+              </div>
+              <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, color: 'var(--text-primary)' }}>
+                {stakeholderMilestoneConflicts.map((c, idx) => (
+                  <div key={idx}>
+                    • <strong>{c.stakeholder.name}</strong> ({c.stakeholder.role}) is unavailable on <strong>{c.dateStr}</strong> during critical milestone <strong>"{c.milestone.name}"</strong> (Leave: {c.absence.startDate} → {c.absence.endDate}).
+                    {c.absence.notes && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>[{c.absence.notes}]</span>}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6, fontWeight: 500 }}>
+                Action Recommended: Reschedule the milestone gate, or confirm an authorized decision-maker delegation.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              background: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 12,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />
+            <div>
+              <strong>All Clear:</strong> No scheduling conflicts detected. All required stakeholders are available on scheduled milestone dates for {format(currentMonth, 'MMMM yyyy')}.
+            </div>
+          </div>
+        )}
+
+        {/* Milestones Strip for this month */}
+        {monthMilestones.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, background: 'var(--bg-elevated)', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+            <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 10 }}>
+              Milestones This Month:
+            </span>
+            {monthMilestones.map(m => (
+              <div
+                key={m.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: 'var(--bg-surface)',
+                  padding: '3px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <span>🎯</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.targetDate}:</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{m.name}</span>
+                <span className={`badge badge-sm badge-${m.status === 'completed' ? 'success' : m.status === 'at-risk' ? 'danger' : 'primary'}`} style={{ fontSize: 9 }}>
+                  {m.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Stakeholder Calendar Matrix */}
+        <div className="team-matrix-wrapper">
+          <table className="team-matrix-table">
+            <thead>
+              <tr>
+                <th
+                  style={{
+                    width: 260,
+                    minWidth: 260,
+                    textAlign: 'left',
+                    padding: '8px 12px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 3,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Key Stakeholder</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Influence / Role</span>
+                  </div>
+                </th>
+                {teamViewDays.map(d => {
+                  const dateStr = format(d, 'yyyy-MM-dd');
+                  const isCurrentDay = isSameDay(d, today);
+                  const isSatSun = isWeekend(d);
+                  const dayMilestones = milestonesByDate[dateStr];
+                  const hasMilestone = dayMilestones && dayMilestones.length > 0;
+
+                  return (
+                    <th
+                      key={d.toISOString()}
+                      style={{
+                        padding: '6px 2px',
+                        textAlign: 'center',
+                        minWidth: 34,
+                        background: hasMilestone
+                          ? 'rgba(247, 154, 79, 0.2)'
+                          : isCurrentDay
+                          ? 'var(--accent-soft)'
+                          : isSatSun
+                          ? 'var(--bg-hover)'
+                          : 'var(--bg-elevated)',
+                        border: hasMilestone ? '2px solid var(--warning)' : '1px solid var(--border)',
+                        color: hasMilestone ? 'var(--warning)' : isCurrentDay ? 'var(--accent)' : 'var(--text-secondary)',
+                        fontWeight: hasMilestone || isCurrentDay ? 700 : 600,
+                      }}
+                      title={hasMilestone ? `Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}` : undefined}
+                    >
+                      <div style={{ fontSize: 11 }}>{format(d, 'd')}</div>
+                      {hasMilestone ? (
+                        <div style={{ fontSize: 9, color: 'var(--warning)', fontWeight: 800 }}>🎯</div>
+                      ) : (
+                        <div style={{ fontSize: 8, opacity: 0.7, textTransform: 'uppercase' }}>
+                          {format(d, 'EEE')}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {stakeholders.map(stk => {
+                return (
+                  <tr key={stk.id}>
+                    {/* Stakeholder Info Column */}
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 2,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar name={stk.name} size={26} />
+                          <div className="min-w-0">
+                            <div style={{ fontWeight: 600, fontSize: 12 }} className="truncate">
+                              {stk.name}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 10 }} className="truncate">
+                              {stk.role} · {stk.organization}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={`badge badge-${
+                            stk.influenceLevel === 'very-high'
+                              ? 'danger'
+                              : stk.influenceLevel === 'high'
+                              ? 'warning'
+                              : 'neutral'
+                          }`}
+                          style={{ fontSize: 9, padding: '1px 5px', flexShrink: 0 }}
+                        >
+                          {stk.influenceLevel}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Day Cells */}
+                    {teamViewDays.map(d => {
+                      const dateStr = format(d, 'yyyy-MM-dd');
+                      const dayAbsences = getAbsencesForStakeholderDay(stk.id, d);
+                      const hasAbsence = dayAbsences.length > 0;
+                      const dayMilestones = milestonesByDate[dateStr];
+                      const isMilestoneDay = dayMilestones && dayMilestones.length > 0;
+                      const hasConflict = hasAbsence && isMilestoneDay;
+                      const isCurrentDay = isSameDay(d, today);
+                      const isSatSun = isWeekend(d);
+
+                      return (
+                        <td
+                          key={d.toISOString()}
+                          className={`team-matrix-cell${hasAbsence ? ' has-absence' : ' empty-cell'}`}
+                          style={{
+                            background: hasConflict
+                              ? 'rgba(239, 68, 68, 0.2)'
+                              : isCurrentDay
+                              ? 'var(--accent-soft)'
+                              : isSatSun
+                              ? 'var(--bg-hover)'
+                              : 'var(--bg-surface)',
+                            border: hasConflict
+                              ? '2px solid var(--danger)'
+                              : isMilestoneDay
+                              ? '1px dashed var(--warning)'
+                              : '1px solid var(--border)',
+                          }}
+                          onClick={() => {
+                            if (hasAbsence) {
+                              handleOpenStakeholderEdit(dayAbsences[0]);
+                            } else {
+                              handleOpenStakeholderCreate(stk.id, dateStr);
+                            }
+                          }}
+                          title={
+                            hasConflict
+                              ? `⚠️ CONFLICT: ${stk.name} is absent during Milestone: ${dayMilestones.map(m => m.name).join(', ')} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\nNotes: ${dayAbsences[0].notes || 'None'}`
+                              : hasAbsence
+                              ? `${stk.name}: ${dayAbsences[0].type.toUpperCase()} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\n${dayAbsences[0].notes || ''}`
+                              : isMilestoneDay
+                              ? `Milestone: ${dayMilestones.map(m => m.name).join(', ')}. Click to log absence for ${stk.name}.`
+                              : `Click to log absence for ${stk.name} on ${dateStr}`
+                          }
+                        >
+                          {hasConflict ? (
+                            <div
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                background: 'var(--danger)',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                borderRadius: 'var(--radius-xs)',
+                              }}
+                            >
+                              ⚠️ GATE
+                            </div>
+                          ) : hasAbsence ? (
+                            <div
+                              className="team-matrix-absence-block"
+                              style={{
+                                background: ABSENCE_COLORS[dayAbsences[0].type] || '#7c6af7',
+                                color: '#ffffff',
+                              }}
+                            >
+                              {(ABSENCE_TYPES.find(t => t.value === dayAbsences[0].type)?.short ||
+                                dayAbsences[0].type.slice(0, 3)
+                              ).toUpperCase()}
+                            </div>
+                          ) : isMilestoneDay ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                opacity: 0.6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                height: '100%',
+                              }}
+                            >
+                              🎯
+                            </div>
+                          ) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span>💡 <strong>Milestone Guard:</strong> Red cells (⚠️ GATE) indicate a stakeholder will be absent on a milestone target date. Click any cell to record or edit their availability.</span>
+        </div>
+      </div>
+
+      {/* Absence Modal (Team Members) */}
       {isModalOpen && (
         <AbsenceModal
           absence={editingAbsence}
@@ -1253,6 +1880,22 @@ export default function TeamCalendar() {
           onClose={() => {
             setIsModalOpen(false);
             setEditingAbsence(null);
+          }}
+          onSave={handleSaveAbsence}
+          onDelete={handleDeleteAbsence}
+        />
+      )}
+
+      {/* Stakeholder Absence Modal */}
+      {isStakeholderModalOpen && (
+        <StakeholderAbsenceModal
+          absence={editingStakeholderAbsence}
+          initialStakeholderId={modalStakeholderId}
+          initialDate={modalStakeholderDate}
+          stakeholders={stakeholders}
+          onClose={() => {
+            setIsStakeholderModalOpen(false);
+            setEditingStakeholderAbsence(null);
           }}
           onSave={handleSaveAbsence}
           onDelete={handleDeleteAbsence}
