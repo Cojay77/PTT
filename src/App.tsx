@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initDatabase } from './db';
-import { hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty } from './data/demoData';
+import { hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty, seedChangeRequestsIfEmpty } from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
 import Layout from './components/layout/Layout';
@@ -28,6 +28,8 @@ import WeeklyReview from './pages/WeeklyReview';
 import Timeline from './pages/Timeline';
 import Handover from './pages/Handover';
 import Settings from './pages/Settings';
+import Budget from './pages/Budget';
+import ChangeRequests from './pages/ChangeRequests';
 import LoadingScreen from './components/ui/LoadingScreen';
 
 export default function App() {
@@ -44,6 +46,8 @@ export default function App() {
           seedDemoData();
         }
         seedWeeklyReviewsIfEmpty();
+        seedBudgetIfEmpty();
+        seedChangeRequestsIfEmpty();
         loadTasks();
         loadAll();
         setDbReady(true);
@@ -91,6 +95,8 @@ export default function App() {
           <Route path="weekly-review" element={<WeeklyReview />} />
           <Route path="timeline" element={<Timeline />} />
           <Route path="handover" element={<Handover />} />
+          <Route path="budget" element={<Budget />} />
+          <Route path="change-requests" element={<ChangeRequests />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

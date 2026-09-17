@@ -6,7 +6,7 @@ import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries,
   actionQueries, communicationQueries, stakeholderQueries, resourceQueries,
   absenceQueries, meetingQueries, noteQueries, activityQueries,
-  projectConfigQueries, weeklyReviewQueries,
+  projectConfigQueries, weeklyReviewQueries, budgetItemQueries, changeRequestQueries,
 } from '../db/queries';
 
 export function hasDemoData(): boolean {
@@ -287,5 +287,113 @@ export function seedWeeklyReviewsIfEmpty(): void {
     });
   } catch (err) {
     console.error('Failed to seed weekly reviews:', err);
+  }
+}
+
+export function seedBudgetIfEmpty(): void {
+  try {
+    const existing = budgetItemQueries.getAll();
+    if (existing.length > 0) return;
+
+    // OPEX — Resources (internal team)
+    budgetItemQueries.create({ category: 'Team', description: 'Project Manager — JB Martin (80% allocation, 9 months)', type: 'opex', vendor: 'Internal', plannedAmount: 54000, actualAmount: 36000, forecastAmount: 54000, currency: 'EUR', status: 'committed', phase: 'All Phases' });
+    budgetItemQueries.create({ category: 'Team', description: 'Lead Developer — Sophie Leclerc (100% allocation, 9 months)', type: 'opex', vendor: 'Internal', plannedAmount: 81000, actualAmount: 54000, forecastAmount: 81000, currency: 'EUR', status: 'committed', phase: 'All Phases' });
+    budgetItemQueries.create({ category: 'Team', description: 'Backend Developer — Karim Benali (100% allocation, 8 months)', type: 'opex', vendor: 'Internal', plannedAmount: 64000, actualAmount: 42000, forecastAmount: 64000, currency: 'EUR', status: 'committed', phase: 'Phase 2–4' });
+    budgetItemQueries.create({ category: 'Team', description: 'QA Engineer — Lucie Vernet (60% allocation, 7 months)', type: 'opex', vendor: 'Internal', plannedAmount: 29400, actualAmount: 8400, forecastAmount: 29400, currency: 'EUR', status: 'planned', phase: 'Phase 3–5' });
+
+    // CAPEX — Infrastructure
+    budgetItemQueries.create({ category: 'Infrastructure', description: 'Azure AKS Kubernetes cluster — DEV + SIT + UAT environments', type: 'capex', vendor: 'Microsoft Azure', plannedAmount: 18000, actualAmount: 9000, forecastAmount: 19500, currency: 'EUR', status: 'committed', phase: 'Phase 1–5', purchaseOrder: 'PO-2026-031', notes: 'Forecast slightly above plan due to additional dev cluster usage' });
+    budgetItemQueries.create({ category: 'Infrastructure', description: 'Azure AD production tenant — SSO integration licensing', type: 'capex', vendor: 'Microsoft', plannedAmount: 4800, actualAmount: 4800, forecastAmount: 4800, currency: 'EUR', status: 'paid', phase: 'Phase 2', purchaseOrder: 'PO-2026-018', invoiceDate: relDate(-90), paymentDate: relDate(-75) });
+    budgetItemQueries.create({ category: 'Infrastructure', description: 'PostgreSQL production managed DB — Azure Database service', type: 'capex', vendor: 'Microsoft Azure', plannedAmount: 7200, actualAmount: 3600, forecastAmount: 7200, currency: 'EUR', status: 'committed', phase: 'Phase 3–5' });
+
+    // License costs
+    budgetItemQueries.create({ category: 'Licenses', description: 'Playwright Enterprise license — test automation', type: 'license', vendor: 'Microsoft', plannedAmount: 1200, actualAmount: 1200, forecastAmount: 1200, currency: 'EUR', status: 'paid', phase: 'Phase 3', invoiceDate: relDate(-60), paymentDate: relDate(-55) });
+    budgetItemQueries.create({ category: 'Licenses', description: 'DataMig Pro license — customer record migration tooling', type: 'license', vendor: 'DataMig Inc.', plannedAmount: 9000, actualAmount: 9000, forecastAmount: 9000, currency: 'EUR', status: 'paid', phase: 'Phase 5', purchaseOrder: 'PO-2026-022', invoiceDate: relDate(-30), paymentDate: relDate(-25) });
+
+    // Consulting / External
+    budgetItemQueries.create({ category: 'Consulting', description: 'UXStudio — UX design & prototyping (Phase 1–3)', type: 'consulting', vendor: 'UXStudio', plannedAmount: 22000, actualAmount: 18000, forecastAmount: 22000, currency: 'EUR', status: 'invoiced', phase: 'Phase 1–3', purchaseOrder: 'PO-2026-012', invoiceDate: relDate(-14) });
+    budgetItemQueries.create({ category: 'Consulting', description: 'CloudArch SARL — Infrastructure architecture (30% allocation)', type: 'consulting', vendor: 'CloudArch SARL', plannedAmount: 15000, actualAmount: 9000, forecastAmount: 16500, currency: 'EUR', status: 'committed', phase: 'Phase 1–5', notes: 'Overage of €1500 expected for additional firewall troubleshooting work' });
+    budgetItemQueries.create({ category: 'Consulting', description: 'Security audit — external penetration testing', type: 'consulting', vendor: 'SecureOps Ltd.', plannedAmount: 8000, actualAmount: 0, forecastAmount: 8000, currency: 'EUR', status: 'planned', phase: 'Phase 4', notes: 'Scheduled for UAT phase before production release' });
+
+    // Contingency reserve
+    budgetItemQueries.create({ category: 'Reserve', description: 'Contingency reserve (10% of total budget)', type: 'other', vendor: 'N/A', plannedAmount: 31400, actualAmount: 0, forecastAmount: 31400, currency: 'EUR', status: 'planned', phase: 'All Phases', notes: 'Contingency reserve to be released by project sponsor approval only' });
+  } catch (err) {
+    console.error('Failed to seed budget items:', err);
+  }
+}
+
+export function seedChangeRequestsIfEmpty(): void {
+  try {
+    const existing = changeRequestQueries.getAll();
+    if (existing.length > 0) return;
+
+    changeRequestQueries.create({
+      title: 'Add multi-language support (EN/FR) to customer portal',
+      description: 'Client has requested French language support be added to the customer portal MVP. Originally out of scope, but customer satisfaction surveys indicate 34% of users prefer French UI.',
+      category: 'scope',
+      requestor: 'Isabelle Moreau (Customer Success)',
+      requestDate: relDate(-18),
+      priority: 'medium',
+      status: 'under-review',
+      impactScope: 'Adds i18n/l10n layer to all portal screens (approx. 85 text keys). Requires translation workflow and QA pass in both languages.',
+      impactSchedule: 'Estimated +3 weeks to Phase 3 delivery if approved. Phase 4 UAT must include French-speaking test users.',
+      impactBudget: 'Estimated +€12,000 (translation services €4k, developer effort €6k, QA €2k)',
+      impactResources: 'Sophie Leclerc and Lucie Vernet will need to reprioritize scope for 3 weeks.',
+      impactRisk: 'Risk of rework if translation keys are added post-development.',
+      estimatedCost: 12000,
+      estimatedDurationDays: 21,
+      justification: 'Customer data shows 34% prefer French. Customer satisfaction is a KPI for project success. Risk of negative adoption post-launch.',
+      alternatives: '1. Add French only to authentication screens (lower effort, partial solution).\n2. Defer to v2 release post-launch.',
+      recommendation: 'Approve scope change with schedule extension to Oct 21. Reject if PM board cannot accept schedule impact.',
+      approver: 'Claire Fontaine',
+      notes: 'Steering committee to decide on Sept 24.',
+    });
+
+    changeRequestQueries.create({
+      title: 'Migrate production database to Azure Flexible Server (PostgreSQL 15)',
+      description: 'The original architecture spec selected PostgreSQL 13 on Azure Database. Microsoft has announced end-of-life for Pg13 in November 2026. Client IT requests migration to PostgreSQL 15 Flexible Server before production go-live.',
+      category: 'technical',
+      requestor: 'Marc Lefort (IT Director)',
+      requestDate: relDate(-10),
+      priority: 'high',
+      status: 'approved',
+      impactScope: 'No functional scope change. Minor schema adjustments required for Pg15 compatibility.',
+      impactSchedule: 'Estimated +1 week for migration scripts and validation. Can overlap with Phase 4 UAT.',
+      impactBudget: 'Negligible — Azure Flexible Server pricing similar to original plan. Estimated +€800/year.',
+      impactResources: 'Karim Benali to lead DB migration. Anna Schreiber (CloudArch) to validate AKS configuration.',
+      impactRisk: 'Low risk. Migration scripts already drafted. Full rollback plan available.',
+      estimatedCost: 800,
+      estimatedDurationDays: 7,
+      justification: 'Required for production stability and security compliance. PostgreSQL 13 EOL before project end date.',
+      alternatives: '1. Proceed with PostgreSQL 13 and plan migration in v2 post-launch (high risk).\n2. Use AWS RDS instead (not accepted — client is Azure-only).',
+      recommendation: 'Approve immediately. Low risk, high necessity, minimal schedule impact.',
+      approver: 'Jean-Baptiste Martin',
+      approvalDate: relDate(-5),
+      decisionNotes: 'Approved by PM. Client IT and CloudArch notified. Migration sprint added to Week 40.',
+    });
+
+    changeRequestQueries.create({
+      title: 'Scope reduction — defer admin panel to Phase 6 post-launch',
+      description: 'Due to Phase 3 schedule pressure caused by the firewall issue, the team proposes deferring the internal admin panel (user management, audit logs, role configuration) to a post-launch Phase 6. Customer-facing features remain unaffected.',
+      category: 'scope',
+      requestor: 'Jean-Baptiste Martin (PM)',
+      requestDate: relDate(-4),
+      priority: 'critical',
+      status: 'submitted',
+      impactScope: 'Admin panel (user management, role editor, audit logs UI) deferred. External customer features unaffected. Internal administrators will use direct DB access temporarily.',
+      impactSchedule: 'Saves 2 weeks on Phase 3. Enables Phase 3 MVP delivery on Sept 30 deadline.',
+      impactBudget: 'Phase 3 saves approx. €6,000 (10 days dev effort). Phase 6 cost TBD.',
+      impactResources: 'Sophie Leclerc freed up for mobile responsiveness and UAT support.',
+      impactRisk: 'Admin operations manually managed during interim period. Risk: IT team must be briefed on manual procedures.',
+      estimatedCost: -6000,
+      estimatedDurationDays: -14,
+      justification: 'Admin panel is internal-only. Deferring keeps the September 30 milestone intact and reduces risk of full Phase 3 failure.',
+      alternatives: '1. Keep scope and request 2-week extension to Phase 3 deadline.\n2. Bring in a contractor for admin panel (additional €15k).',
+      recommendation: 'Approve scope reduction. Admin panel to be scheduled in Phase 6 with separate budget request.',
+      approver: 'Claire Fontaine',
+      notes: 'Awaiting sponsor approval. Steering committee Sept 24 is the decision point.',
+    });
+  } catch (err) {
+    console.error('Failed to seed change requests:', err);
   }
 }

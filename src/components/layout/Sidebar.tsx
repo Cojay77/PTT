@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FolderKanban, CheckSquare, ListTodo, Milestone, MessageSquare,
   Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale,
   CalendarCheck, Shield, BookOpen, BarChart3, ClipboardCheck, GitBranch,
-  HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle
+  HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle, DollarSign, GitMerge,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
@@ -66,6 +66,13 @@ const navGroups = [
     ],
   },
   {
+    label: 'Finance & Change',
+    items: [
+      { path: '/budget', icon: DollarSign, label: 'Budget Tracking' },
+      { path: '/change-requests', icon: GitMerge, label: 'Change Requests', badge: 'changeRequests' },
+    ],
+  },
+  {
     label: 'Workspace',
     items: [
       { path: '/notes', icon: BookOpen, label: 'Notebook' },
@@ -77,7 +84,7 @@ const navGroups = [
 export default function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed, setQuickCaptureOpen } = useUIStore();
   const tasks = useTaskStore((s) => s.tasks);
-  const { risks, issues, decisions, actions, communications, milestones, projectConfig } = useDataStore();
+  const { risks, issues, decisions, actions, communications, milestones, projectConfig, changeRequests } = useDataStore();
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -123,6 +130,11 @@ export default function Sidebar() {
       (m) => m.status === 'delayed' || m.status === 'at-risk'
     ).length;
 
+    // Open change requests awaiting decision
+    const openChangeRequests = changeRequests.filter(
+      (c) => ['draft', 'submitted', 'under-review'].includes(c.status) && (c.priority === 'critical' || c.priority === 'high')
+    ).length;
+
     // RAID combined alert count
     const raidAlerts = openRisks + openIssues + pendingDecisions;
 
@@ -135,9 +147,10 @@ export default function Sidebar() {
     if (overdueComms > 0) map.comms = { count: overdueComms, level: 'warning' };
     if (delayedMilestones > 0) map.milestones = { count: delayedMilestones, level: 'warning' };
     if (raidAlerts > 0) map.raid = { count: raidAlerts, level: 'danger' };
+    if (openChangeRequests > 0) map.changeRequests = { count: openChangeRequests, level: 'warning' };
 
     return map;
-  }, [tasks, risks, issues, decisions, actions, communications, milestones, today]);
+  }, [tasks, risks, issues, decisions, actions, communications, milestones, changeRequests, today]);
 
   const projectName = projectConfig?.name || 'Customer Portal Migration';
   const projectCode = projectConfig?.code || 'CPM-2026';

@@ -18,6 +18,11 @@ export type BacklogStatus = 'new' | 'refined' | 'promoted' | 'rejected';
 export type Probability = 1 | 2 | 3 | 4 | 5;
 export type Impact = 1 | 2 | 3 | 4 | 5;
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
+export type BudgetItemType = 'capex' | 'opex' | 'resource' | 'infrastructure' | 'license' | 'consulting' | 'other';
+export type BudgetItemStatus = 'planned' | 'committed' | 'invoiced' | 'paid' | 'cancelled';
+export type ChangeRequestStatus = 'draft' | 'submitted' | 'under-review' | 'approved' | 'rejected' | 'withdrawn' | 'implemented';
+export type ChangeRequestCategory = 'scope' | 'schedule' | 'budget' | 'resources' | 'technical' | 'quality' | 'other';
+export type ChangeRequestPriority = 'critical' | 'high' | 'medium' | 'low';
 
 export interface ProjectConfig {
   id: ID;
@@ -275,6 +280,56 @@ export interface ActivityLog {
   action: string;
   description: string;
   createdAt: string;
+}
+
+export interface BudgetItem {
+  id: ID;
+  category: string;
+  description: string;
+  type: BudgetItemType;
+  vendor: string;
+  plannedAmount: number;
+  actualAmount: number;
+  forecastAmount: number;
+  currency: string;
+  status: BudgetItemStatus;
+  invoiceDate: string;
+  paymentDate: string;
+  purchaseOrder: string;
+  phase: string;
+  milestoneId: ID | null;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChangeRequest {
+  id: ID;
+  title: string;
+  description: string;
+  category: ChangeRequestCategory;
+  requestor: string;
+  requestDate: string;
+  priority: ChangeRequestPriority;
+  status: ChangeRequestStatus;
+  impactScope: string;
+  impactSchedule: string;
+  impactBudget: string;
+  impactResources: string;
+  impactRisk: string;
+  estimatedCost: number;
+  estimatedDurationDays: number;
+  justification: string;
+  alternatives: string;
+  recommendation: string;
+  approver: string;
+  approvalDate: string;
+  decisionNotes: string;
+  linkedMilestoneId: ID | null;
+  linkedTaskIds: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WeeklyReviewSnapshot {

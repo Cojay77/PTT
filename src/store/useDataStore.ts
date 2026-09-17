@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview } from '../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest } from '../types';
 import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries, actionQueries,
   communicationQueries, stakeholderQueries, resourceQueries, absenceQueries,
   meetingQueries, noteQueries, activityQueries, projectConfigQueries, weeklyReviewQueries,
+  budgetItemQueries, changeRequestQueries,
 } from '../db/queries';
 
 interface DataState {
@@ -21,6 +22,8 @@ interface DataState {
   notes: Note[];
   activityLog: ActivityLog[];
   weeklyReviews: WeeklyReview[];
+  budgetItems: BudgetItem[];
+  changeRequests: ChangeRequest[];
   isLoaded: boolean;
 
   loadAll: () => void;
@@ -39,11 +42,23 @@ interface DataState {
   loadNotes: () => void;
   loadActivity: () => void;
   loadWeeklyReviews: () => void;
+  loadBudgetItems: () => void;
+  loadChangeRequests: () => void;
 
   // Weekly Reviews
   createWeeklyReview: (w: Partial<WeeklyReview>) => WeeklyReview;
   updateWeeklyReview: (id: string, u: Partial<WeeklyReview>) => void;
   deleteWeeklyReview: (id: string) => void;
+
+  // Budget Items
+  createBudgetItem: (b: Partial<BudgetItem>) => BudgetItem;
+  updateBudgetItem: (id: string, u: Partial<BudgetItem>) => void;
+  deleteBudgetItem: (id: string) => void;
+
+  // Change Requests
+  createChangeRequest: (c: Partial<ChangeRequest>) => ChangeRequest;
+  updateChangeRequest: (id: string, u: Partial<ChangeRequest>) => void;
+  deleteChangeRequest: (id: string) => void;
 
   // Milestones
   createMilestone: (m: Partial<Milestone>) => Milestone;
@@ -105,7 +120,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   projectConfig: null,
   milestones: [], risks: [], issues: [], decisions: [], actions: [],
   communications: [], stakeholders: [], resources: [], absences: [],
-  meetings: [], notes: [], activityLog: [], weeklyReviews: [], isLoaded: false,
+  meetings: [], notes: [], activityLog: [], weeklyReviews: [], budgetItems: [], changeRequests: [], isLoaded: false,
 
   loadAll: () => {
     set({
@@ -123,6 +138,8 @@ export const useDataStore = create<DataState>((set, get) => ({
       notes: noteQueries.getAll(),
       activityLog: activityQueries.getRecent(60),
       weeklyReviews: weeklyReviewQueries.getAll(),
+      budgetItems: budgetItemQueries.getAll(),
+      changeRequests: changeRequestQueries.getAll(),
       isLoaded: true,
     });
   },
@@ -146,6 +163,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   loadNotes: () => set({ notes: noteQueries.getAll() }),
   loadActivity: () => set({ activityLog: activityQueries.getRecent(60) }),
   loadWeeklyReviews: () => set({ weeklyReviews: weeklyReviewQueries.getAll() }),
+  loadBudgetItems: () => set({ budgetItems: budgetItemQueries.getAll() }),
+  loadChangeRequests: () => set({ changeRequests: changeRequestQueries.getAll() }),
 
   // Weekly Reviews
   createWeeklyReview: (w) => {
@@ -218,4 +237,15 @@ export const useDataStore = create<DataState>((set, get) => ({
   createNote: (n) => { const created = noteQueries.create(n); activityQueries.log('note', created.id, created.title, 'created'); get().loadNotes(); get().loadActivity(); return created; },
   updateNote: (id, u) => { noteQueries.update(id, u); get().loadNotes(); },
   deleteNote: (id) => { noteQueries.delete(id); get().loadNotes(); },
+
+  // Budget Items
+  createBudgetItem: (b) => { const created = budgetItemQueries.create(b); activityQueries.log('budget', created.id, created.description, 'created'); get().loadBudgetItems(); get().loadActivity(); return created; },
+  updateBudgetItem: (id, u) => { budgetItemQueries.update(id, u); get().loadBudgetItems(); get().loadActivity(); },
+  deleteBudgetItem: (id) => { budgetItemQueries.delete(id); get().loadBudgetItems(); },
+
+  // Change Requests
+  createChangeRequest: (c) => { const created = changeRequestQueries.create(c); activityQueries.log('change-request', created.id, created.title, 'created'); get().loadChangeRequests(); get().loadActivity(); return created; },
+  updateChangeRequest: (id, u) => { changeRequestQueries.update(id, u); get().loadChangeRequests(); get().loadActivity(); },
+  deleteChangeRequest: (id) => { changeRequestQueries.delete(id); get().loadChangeRequests(); },
 }));
+

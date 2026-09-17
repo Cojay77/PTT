@@ -1,5 +1,5 @@
 import { query, queryOne, execute, generateId } from '../db';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview } from '../../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest } from '../../types';
 
 // ============================================================
 // Milestone queries
@@ -737,3 +737,140 @@ export function globalSearch(term: string): Array<{ type: string; id: string; ti
 
   return results;
 }
+
+// ============================================================
+// Budget Item queries
+// ============================================================
+function rowToBudgetItem(r: Record<string, unknown>): BudgetItem {
+  return {
+    id: r.id as string,
+    category: (r.category as string) || 'general',
+    description: (r.description as string) || '',
+    type: (r.type as BudgetItem['type']) || 'opex',
+    vendor: (r.vendor as string) || '',
+    plannedAmount: (r.planned_amount as number) || 0,
+    actualAmount: (r.actual_amount as number) || 0,
+    forecastAmount: (r.forecast_amount as number) || 0,
+    currency: (r.currency as string) || 'EUR',
+    status: (r.status as BudgetItem['status']) || 'planned',
+    invoiceDate: (r.invoice_date as string) || '',
+    paymentDate: (r.payment_date as string) || '',
+    purchaseOrder: (r.purchase_order as string) || '',
+    phase: (r.phase as string) || '',
+    milestoneId: (r.milestone_id as string) || null,
+    notes: (r.notes as string) || '',
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  };
+}
+
+export const budgetItemQueries = {
+  getAll(): BudgetItem[] {
+    try {
+      return query<Record<string, unknown>>(`SELECT * FROM budget_items ORDER BY category, description`).map(rowToBudgetItem);
+    } catch { return []; }
+  },
+  getById(id: string): BudgetItem | null {
+    try {
+      const r = queryOne<Record<string, unknown>>(`SELECT * FROM budget_items WHERE id = ?`, [id]);
+      return r ? rowToBudgetItem(r) : null;
+    } catch { return null; }
+  },
+  create(b: Partial<BudgetItem>): BudgetItem {
+    const id = generateId();
+    const now = new Date().toISOString();
+    execute(
+      `INSERT INTO budget_items (id, category, description, type, vendor, planned_amount, actual_amount, forecast_amount, currency, status, invoice_date, payment_date, purchase_order, phase, milestone_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, b.category || 'general', b.description || '', b.type || 'opex', b.vendor || '', b.plannedAmount || 0, b.actualAmount || 0, b.forecastAmount || 0, b.currency || 'EUR', b.status || 'planned', b.invoiceDate || '', b.paymentDate || '', b.purchaseOrder || '', b.phase || '', b.milestoneId || null, b.notes || '', now, now]
+    );
+    return this.getById(id)!;
+  },
+  update(id: string, updates: Partial<BudgetItem>): BudgetItem | null {
+    const now = new Date().toISOString();
+    const map: Record<string, string> = { category: 'category', description: 'description', type: 'type', vendor: 'vendor', plannedAmount: 'planned_amount', actualAmount: 'actual_amount', forecastAmount: 'forecast_amount', currency: 'currency', status: 'status', invoiceDate: 'invoice_date', paymentDate: 'payment_date', purchaseOrder: 'purchase_order', phase: 'phase', milestoneId: 'milestone_id', notes: 'notes' };
+    const fields: string[] = [], values: (string | number | null)[] = [];
+    for (const [k, col] of Object.entries(map)) {
+      if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof BudgetItem] as string | number | null); }
+    }
+    if (!fields.length) return this.getById(id);
+    fields.push('updated_at = ?'); values.push(now, id);
+    execute(`UPDATE budget_items SET ${fields.join(', ')} WHERE id = ?`, values);
+    return this.getById(id);
+  },
+  delete(id: string) { execute(`DELETE FROM budget_items WHERE id = ?`, [id]); },
+};
+
+// ============================================================
+// Change Request queries
+// ============================================================
+function rowToChangeRequest(r: Record<string, unknown>): ChangeRequest {
+  return {
+    id: r.id as string,
+    title: (r.title as string) || '',
+    description: (r.description as string) || '',
+    category: (r.category as ChangeRequest['category']) || 'scope',
+    requestor: (r.requestor as string) || '',
+    requestDate: (r.request_date as string) || '',
+    priority: (r.priority as ChangeRequest['priority']) || 'medium',
+    status: (r.status as ChangeRequest['status']) || 'draft',
+    impactScope: (r.impact_scope as string) || '',
+    impactSchedule: (r.impact_schedule as string) || '',
+    impactBudget: (r.impact_budget as string) || '',
+    impactResources: (r.impact_resources as string) || '',
+    impactRisk: (r.impact_risk as string) || '',
+    estimatedCost: (r.estimated_cost as number) || 0,
+    estimatedDurationDays: (r.estimated_duration_days as number) || 0,
+    justification: (r.justification as string) || '',
+    alternatives: (r.alternatives as string) || '',
+    recommendation: (r.recommendation as string) || '',
+    approver: (r.approver as string) || '',
+    approvalDate: (r.approval_date as string) || '',
+    decisionNotes: (r.decision_notes as string) || '',
+    linkedMilestoneId: (r.linked_milestone_id as string) || null,
+    linkedTaskIds: (r.linked_task_ids as string) || '',
+    notes: (r.notes as string) || '',
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  };
+}
+
+export const changeRequestQueries = {
+  getAll(): ChangeRequest[] {
+    try {
+      return query<Record<string, unknown>>(`SELECT * FROM change_requests ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC`).map(rowToChangeRequest);
+    } catch { return []; }
+  },
+  getById(id: string): ChangeRequest | null {
+    try {
+      const r = queryOne<Record<string, unknown>>(`SELECT * FROM change_requests WHERE id = ?`, [id]);
+      return r ? rowToChangeRequest(r) : null;
+    } catch { return null; }
+  },
+  getOpen(): ChangeRequest[] {
+    try {
+      return query<Record<string, unknown>>(`SELECT * FROM change_requests WHERE status NOT IN ('approved','rejected','withdrawn','implemented') ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`).map(rowToChangeRequest);
+    } catch { return []; }
+  },
+  create(c: Partial<ChangeRequest>): ChangeRequest {
+    const id = generateId();
+    const now = new Date().toISOString();
+    execute(
+      `INSERT INTO change_requests (id, title, description, category, requestor, request_date, priority, status, impact_scope, impact_schedule, impact_budget, impact_resources, impact_risk, estimated_cost, estimated_duration_days, justification, alternatives, recommendation, approver, approval_date, decision_notes, linked_milestone_id, linked_task_ids, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, c.title || '', c.description || '', c.category || 'scope', c.requestor || '', c.requestDate || '', c.priority || 'medium', c.status || 'draft', c.impactScope || '', c.impactSchedule || '', c.impactBudget || '', c.impactResources || '', c.impactRisk || '', c.estimatedCost || 0, c.estimatedDurationDays || 0, c.justification || '', c.alternatives || '', c.recommendation || '', c.approver || '', c.approvalDate || '', c.decisionNotes || '', c.linkedMilestoneId || null, c.linkedTaskIds || '', c.notes || '', now, now]
+    );
+    return this.getById(id)!;
+  },
+  update(id: string, updates: Partial<ChangeRequest>): ChangeRequest | null {
+    const now = new Date().toISOString();
+    const map: Record<string, string> = { title: 'title', description: 'description', category: 'category', requestor: 'requestor', requestDate: 'request_date', priority: 'priority', status: 'status', impactScope: 'impact_scope', impactSchedule: 'impact_schedule', impactBudget: 'impact_budget', impactResources: 'impact_resources', impactRisk: 'impact_risk', estimatedCost: 'estimated_cost', estimatedDurationDays: 'estimated_duration_days', justification: 'justification', alternatives: 'alternatives', recommendation: 'recommendation', approver: 'approver', approvalDate: 'approval_date', decisionNotes: 'decision_notes', linkedMilestoneId: 'linked_milestone_id', linkedTaskIds: 'linked_task_ids', notes: 'notes' };
+    const fields: string[] = [], values: (string | number | null)[] = [];
+    for (const [k, col] of Object.entries(map)) {
+      if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof ChangeRequest] as string | number | null); }
+    }
+    if (!fields.length) return this.getById(id);
+    fields.push('updated_at = ?'); values.push(now, id);
+    execute(`UPDATE change_requests SET ${fields.join(', ')} WHERE id = ?`, values);
+    return this.getById(id);
+  },
+  delete(id: string) { execute(`DELETE FROM change_requests WHERE id = ?`, [id]); },
+};
