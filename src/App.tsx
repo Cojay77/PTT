@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initDatabase } from './db';
-import { hasDemoData, seedDemoData } from './data/demoData';
+import { hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty } from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
 import Layout from './components/layout/Layout';
@@ -43,6 +43,7 @@ export default function App() {
         if (!hasDemoData()) {
           seedDemoData();
         }
+        seedWeeklyReviewsIfEmpty();
         loadTasks();
         loadAll();
         setDbReady(true);

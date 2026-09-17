@@ -277,6 +277,44 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+export interface WeeklyReviewSnapshot {
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  blockedTasks: number;
+  overdueTasks: number;
+  activeRisks: number;
+  criticalRisks: number;
+  activeIssues: number;
+  criticalIssues?: number;
+  pendingDecisions: number;
+  upcomingMilestones: number;
+  awaitingCommunications: number;
+  completedTaskTitles?: string[];
+  inProgressTaskTitles?: string[];
+  blockedTaskTitles?: string[];
+  openIssueTitles?: string[];
+  criticalRiskTitles?: string[];
+  upcomingMilestoneTitles?: string[];
+}
+
+export interface WeeklyReview {
+  id: ID;
+  weekNumber: number;
+  year: number;
+  periodStart: string;
+  periodEnd: string;
+  status: 'draft' | 'completed';
+  overallHealth: 'on-track' | 'at-risk' | 'off-track';
+  summary: string;
+  achievements: string;
+  prioritiesNextWeek: string;
+  blockersNotes: string;
+  snapshotJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Alert {
   id: string;
   level: AlertLevel;

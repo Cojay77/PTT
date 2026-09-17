@@ -1,5 +1,5 @@
 import { query, queryOne, execute, generateId } from '../db';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig } from '../../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview } from '../../types';
 
 // ============================================================
 // Milestone queries
@@ -573,6 +573,119 @@ export const projectConfigQueries = {
 function toSnake(camel: string): string {
   return camel.replace(/([A-Z])/g, '_$1').toLowerCase();
 }
+
+// ============================================================
+// Weekly Review queries
+// ============================================================
+function rowToWeeklyReview(r: Record<string, unknown>): WeeklyReview {
+  return {
+    id: r.id as string,
+    weekNumber: (r.week_number as number) || 1,
+    year: (r.year as number) || new Date().getFullYear(),
+    periodStart: (r.period_start as string) || '',
+    periodEnd: (r.period_end as string) || '',
+    status: (r.status as WeeklyReview['status']) || 'draft',
+    overallHealth: (r.overall_health as WeeklyReview['overallHealth']) || 'on-track',
+    summary: (r.summary as string) || '',
+    achievements: (r.achievements as string) || '',
+    prioritiesNextWeek: (r.priorities_next_week as string) || '',
+    blockersNotes: (r.blockers_notes as string) || '',
+    snapshotJson: (r.snapshot_json as string) || '{}',
+    createdAt: (r.created_at as string) || new Date().toISOString(),
+    updatedAt: (r.updated_at as string) || new Date().toISOString(),
+  };
+}
+
+export const weeklyReviewQueries = {
+  getAll(): WeeklyReview[] {
+    try {
+      return query<Record<string, unknown>>(
+        `SELECT * FROM weekly_reviews ORDER BY year DESC, week_number DESC`
+      ).map(rowToWeeklyReview);
+    } catch {
+      return [];
+    }
+  },
+  getById(id: string): WeeklyReview | null {
+    try {
+      const r = queryOne<Record<string, unknown>>(`SELECT * FROM weekly_reviews WHERE id = ?`, [id]);
+      return r ? rowToWeeklyReview(r) : null;
+    } catch {
+      return null;
+    }
+  },
+  getByWeek(year: number, weekNumber: number): WeeklyReview | null {
+    try {
+      const r = queryOne<Record<string, unknown>>(
+        `SELECT * FROM weekly_reviews WHERE year = ? AND week_number = ?`,
+        [year, weekNumber]
+      );
+      return r ? rowToWeeklyReview(r) : null;
+    } catch {
+      return null;
+    }
+  },
+  create(w: Partial<WeeklyReview>): WeeklyReview {
+    const id = generateId();
+    const now = new Date().toISOString();
+    execute(
+      `INSERT INTO weekly_reviews (
+        id, week_number, year, period_start, period_end, status, overall_health,
+        summary, achievements, priorities_next_week, blockers_notes, snapshot_json,
+        created_at, updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        id,
+        w.weekNumber ?? 1,
+        w.year ?? new Date().getFullYear(),
+        w.periodStart || '',
+        w.periodEnd || '',
+        w.status || 'draft',
+        w.overallHealth || 'on-track',
+        w.summary || '',
+        w.achievements || '',
+        w.prioritiesNextWeek || '',
+        w.blockersNotes || '',
+        w.snapshotJson || '{}',
+        now,
+        now,
+      ]
+    );
+    return this.getById(id)!;
+  },
+  update(id: string, updates: Partial<WeeklyReview>): WeeklyReview | null {
+    const now = new Date().toISOString();
+    const map: Record<string, string> = {
+      weekNumber: 'week_number',
+      year: 'year',
+      periodStart: 'period_start',
+      periodEnd: 'period_end',
+      status: 'status',
+      overallHealth: 'overall_health',
+      summary: 'summary',
+      achievements: 'achievements',
+      prioritiesNextWeek: 'priorities_next_week',
+      blockersNotes: 'blockers_notes',
+      snapshotJson: 'snapshot_json',
+    };
+    const fields: string[] = [];
+    const values: (string | number | null)[] = [];
+    for (const [k, col] of Object.entries(map)) {
+      if (k in updates) {
+        fields.push(`${col} = ?`);
+        values.push(updates[k as keyof WeeklyReview] as string | number);
+      }
+    }
+    if (!fields.length) return this.getById(id);
+    fields.push('updated_at = ?');
+    values.push(now, id);
+    execute(`UPDATE weekly_reviews SET ${fields.join(', ')} WHERE id = ?`, values);
+    return this.getById(id);
+  },
+  delete(id: string) {
+    execute(`DELETE FROM weekly_reviews WHERE id = ?`, [id]);
+  },
+};
 
 // ============================================================
 // Settings queries

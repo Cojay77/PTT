@@ -7,8 +7,28 @@ interface Migration {
 }
 
 const MIGRATIONS: Migration[] = [
-  // Future migrations go here
-  // { version: 2, up: `ALTER TABLE tasks ADD COLUMN new_field TEXT DEFAULT '';` },
+  {
+    version: 2,
+    up: `
+      CREATE TABLE IF NOT EXISTS weekly_reviews (
+        id TEXT PRIMARY KEY,
+        week_number INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        status TEXT DEFAULT 'draft',
+        overall_health TEXT DEFAULT 'on-track',
+        summary TEXT DEFAULT '',
+        achievements TEXT DEFAULT '',
+        priorities_next_week TEXT DEFAULT '',
+        blockers_notes TEXT DEFAULT '',
+        snapshot_json TEXT DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_weekly_reviews_week ON weekly_reviews(year DESC, week_number DESC);
+    `,
+  },
 ];
 
 export async function runMigrations(db: Database): Promise<void> {

@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig } from '../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview } from '../types';
 import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries, actionQueries,
   communicationQueries, stakeholderQueries, resourceQueries, absenceQueries,
-  meetingQueries, noteQueries, activityQueries, projectConfigQueries,
+  meetingQueries, noteQueries, activityQueries, projectConfigQueries, weeklyReviewQueries,
 } from '../db/queries';
 
 interface DataState {
@@ -20,6 +20,7 @@ interface DataState {
   meetings: Meeting[];
   notes: Note[];
   activityLog: ActivityLog[];
+  weeklyReviews: WeeklyReview[];
   isLoaded: boolean;
 
   loadAll: () => void;
@@ -37,6 +38,12 @@ interface DataState {
   loadMeetings: () => void;
   loadNotes: () => void;
   loadActivity: () => void;
+  loadWeeklyReviews: () => void;
+
+  // Weekly Reviews
+  createWeeklyReview: (w: Partial<WeeklyReview>) => WeeklyReview;
+  updateWeeklyReview: (id: string, u: Partial<WeeklyReview>) => void;
+  deleteWeeklyReview: (id: string) => void;
 
   // Milestones
   createMilestone: (m: Partial<Milestone>) => Milestone;
@@ -98,7 +105,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   projectConfig: null,
   milestones: [], risks: [], issues: [], decisions: [], actions: [],
   communications: [], stakeholders: [], resources: [], absences: [],
-  meetings: [], notes: [], activityLog: [], isLoaded: false,
+  meetings: [], notes: [], activityLog: [], weeklyReviews: [], isLoaded: false,
 
   loadAll: () => {
     set({
@@ -115,6 +122,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       meetings: meetingQueries.getAll(),
       notes: noteQueries.getAll(),
       activityLog: activityQueries.getRecent(60),
+      weeklyReviews: weeklyReviewQueries.getAll(),
       isLoaded: true,
     });
   },
@@ -137,6 +145,24 @@ export const useDataStore = create<DataState>((set, get) => ({
   loadMeetings: () => set({ meetings: meetingQueries.getAll() }),
   loadNotes: () => set({ notes: noteQueries.getAll() }),
   loadActivity: () => set({ activityLog: activityQueries.getRecent(60) }),
+  loadWeeklyReviews: () => set({ weeklyReviews: weeklyReviewQueries.getAll() }),
+
+  // Weekly Reviews
+  createWeeklyReview: (w) => {
+    const created = weeklyReviewQueries.create(w);
+    activityQueries.log('weekly-review', created.id, `Week ${created.weekNumber} (${created.year})`, 'created');
+    get().loadWeeklyReviews();
+    get().loadActivity();
+    return created;
+  },
+  updateWeeklyReview: (id, u) => {
+    weeklyReviewQueries.update(id, u);
+    get().loadWeeklyReviews();
+  },
+  deleteWeeklyReview: (id) => {
+    weeklyReviewQueries.delete(id);
+    get().loadWeeklyReviews();
+  },
 
   // Milestones
   createMilestone: (m) => { const r = milestoneQueries.create(m); activityQueries.log('milestone', r.id, r.name, 'created'); get().loadMilestones(); get().loadActivity(); return r; },

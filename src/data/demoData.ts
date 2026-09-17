@@ -6,7 +6,7 @@ import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries,
   actionQueries, communicationQueries, stakeholderQueries, resourceQueries,
   absenceQueries, meetingQueries, noteQueries, activityQueries,
-  projectConfigQueries,
+  projectConfigQueries, weeklyReviewQueries,
 } from '../db/queries';
 
 export function hasDemoData(): boolean {
@@ -147,4 +147,145 @@ function relDate(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
+}
+
+export function seedWeeklyReviewsIfEmpty(): void {
+  try {
+    const existing = weeklyReviewQueries.getAll();
+    if (existing.length > 0) return;
+
+    // Week 36 (Completed)
+    weeklyReviewQueries.create({
+      weekNumber: 36,
+      year: 2026,
+      periodStart: '2026-08-31',
+      periodEnd: '2026-09-06',
+      status: 'completed',
+      overallHealth: 'on-track',
+      summary: 'Sprint 5 review: Backend API v1 benchmarks completed successfully. Security scan resolved all high priority findings. Azure AD SSO authentication pull request merged cleanly into develop.',
+      achievements: '- Merged Azure AD SSO pull request into develop with full test coverage\n- Completed automated migration script for 120k+ customer contact records\n- Finalized UX wireframes and interactive prototypes with UXStudio\n- Executed internal code review for core data access layer',
+      prioritiesNextWeek: '- Prepare UAT deployment environment on Azure AKS\n- Request client IT outbound firewall rules for UAT → Azure AD handshake\n- Kick off work on reporting module and export UI components',
+      blockersNotes: 'No critical blockers recorded this week.',
+      snapshotJson: JSON.stringify({
+        totalTasks: 16,
+        completedTasks: 6,
+        inProgressTasks: 5,
+        blockedTasks: 0,
+        overdueTasks: 0,
+        activeRisks: 2,
+        criticalRisks: 0,
+        activeIssues: 1,
+        pendingDecisions: 1,
+        upcomingMilestones: 1,
+        awaitingCommunications: 1,
+        completedTaskTitles: [
+          'Azure AD SSO integration module',
+          'Database migration script for customer contacts',
+          'Customer portal wireframes sign-off',
+          'PostgreSQL schema indexing & constraints',
+          'Security vulnerability scan & remediation',
+          'Redis session caching setup',
+        ],
+        inProgressTaskTitles: [
+          'Reporting module API endpoints',
+          'Mobile responsive CSS polish',
+          'UAT deployment manifests for Kubernetes',
+        ],
+        blockedTaskTitles: [],
+        openIssueTitles: ['Session timeout bug on Safari mobile'],
+        criticalRiskTitles: [],
+      }),
+    });
+
+    // Week 37 (Completed)
+    weeklyReviewQueries.create({
+      weekNumber: 37,
+      year: 2026,
+      periodStart: '2026-09-07',
+      periodEnd: '2026-09-13',
+      status: 'completed',
+      overallHealth: 'at-risk',
+      summary: 'Encountered unexpected network firewall blocking on UAT cluster preventing Azure AD handshake (Ticket #NET-4421). Phase 3 MVP milestone is now under scrutiny. Development continues in local and SIT environments.',
+      achievements: '- Reporting module UI components 70% completed\n- Pilot customer list initiated with 23 confirmed pilot accounts\n- Database migration dry-run executed on staging without record loss\n- API documentation written for developer partner integration',
+      prioritiesNextWeek: '- Resolve firewall blocker ticket #NET-4421 with client IT (Marc Lefort)\n- Address reporting module query performance (P95 latency currently 8.3s)\n- Send weekly status update to CTO Claire Fontaine\n- Prepare for steering committee meeting',
+      blockersNotes: 'Ticket #NET-4421 awaiting client IT response. UAT deployment fully blocked.',
+      snapshotJson: JSON.stringify({
+        totalTasks: 18,
+        completedTasks: 5,
+        inProgressTasks: 6,
+        blockedTasks: 2,
+        overdueTasks: 1,
+        activeRisks: 3,
+        criticalRisks: 1,
+        activeIssues: 2,
+        pendingDecisions: 2,
+        upcomingMilestones: 1,
+        awaitingCommunications: 3,
+        completedTaskTitles: [
+          'Reporting module data tables',
+          'Customer profile view page',
+          'Automated Playwright test harness',
+          'Staging migration dry run script',
+          'Partner API documentation draft',
+        ],
+        inProgressTaskTitles: [
+          'Reporting module export dialog',
+          'Mobile navigation menu responsive tuning',
+          'UAT cluster deployment verification',
+        ],
+        blockedTaskTitles: [
+          'Deploy to UAT environment (Blocked by firewall #NET-4421)',
+          'External partner OAuth validation',
+        ],
+        openIssueTitles: [
+          'UAT environment inaccessible (firewall blocking)',
+          'Reporting module query latency (P95 > 8s)',
+        ],
+        criticalRiskTitles: ['Firewall configuration delay impacting Phase 3 delivery'],
+      }),
+    });
+
+    // Week 38 (Current - Draft)
+    weeklyReviewQueries.create({
+      weekNumber: 38,
+      year: 2026,
+      periodStart: '2026-09-14',
+      periodEnd: '2026-09-20',
+      status: 'draft',
+      overallHealth: 'at-risk',
+      summary: 'Current week review: Active follow-up with Marc Lefort on firewall ticket. Escalation planned for Friday if no progress. Karim Benali identified 3 unindexed queries to solve reporting latency.',
+      achievements: '- Identified database index optimizations reducing reporting queries by 65%\n- Drafted Steering Committee agenda and presentation pack\n- Finalized export modal UI with UXStudio',
+      prioritiesNextWeek: '- Obtain sign-off on firewall configuration\n- Deliver Phase 3 customer portal MVP\n- Conduct dry run with pilot group users\n- Present status at Steering Committee on Sept 24',
+      blockersNotes: 'Firewall rules configuration — UAT environment still pending.',
+      snapshotJson: JSON.stringify({
+        totalTasks: 20,
+        completedTasks: 4,
+        inProgressTasks: 5,
+        blockedTasks: 2,
+        overdueTasks: 2,
+        activeRisks: 3,
+        criticalRisks: 1,
+        activeIssues: 2,
+        pendingDecisions: 2,
+        upcomingMilestones: 1,
+        awaitingCommunications: 2,
+        completedTaskTitles: [
+          'Reporting module query optimization indices',
+          'Export modal UI layout',
+          'Steering committee briefing slide deck',
+          'Customer search debounce optimization',
+        ],
+        inProgressTaskTitles: [
+          'Phase 3 customer portal MVP acceptance testing',
+          'Export dialog backend endpoints',
+          'UAT environment smoke tests',
+        ],
+        blockedTaskTitles: ['Deploy to UAT environment (Ticket #NET-4421)'],
+        openIssueTitles: ['Firewall rules configuration pending'],
+        criticalRiskTitles: ['Phase 3 MVP delay risk'],
+      }),
+    });
+  } catch (err) {
+    console.error('Failed to seed weekly reviews:', err);
+  }
 }

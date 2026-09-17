@@ -2159,3 +2159,428 @@ input, textarea, select {
   text-underline-offset: 2px;
 }
 
+/* ============================================================
+   Weekly Review Styles
+   ============================================================ */
+.weekly-review-page {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.weekly-review-container {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .weekly-review-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.weekly-review-sidebar {
+  padding: 0;
+  overflow: hidden;
+}
+
+.weekly-review-list {
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weekly-current-prompt {
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.weekly-current-prompt:hover {
+  background: var(--bg-hover);
+}
+
+.weekly-start-btn-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 6px;
+  display: inline-block;
+}
+
+.weekly-list-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.weekly-list-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.weekly-list-item.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.weekly-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.weekly-item-year {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.weekly-tag-current {
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+}
+
+.weekly-item-period {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.weekly-status-tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+}
+
+.weekly-status-tag.status-completed {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success-border);
+}
+
+.weekly-status-tag.status-draft {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
+}
+
+.weekly-health-pill {
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weekly-health-pill.health-on-track {
+  color: var(--success);
+}
+
+.weekly-health-pill.health-at-risk {
+  color: var(--warning);
+}
+
+.weekly-health-pill.health-off-track {
+  color: var(--danger);
+}
+
+.weekly-item-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.weekly-item-metrics .blocked-count {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.weekly-empty-list {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Main pane */
+.weekly-header-card {
+  padding: 20px 24px;
+}
+
+.weekly-main-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.weekly-period-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.weekly-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.weekly-control-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.weekly-health-selector {
+  display: flex;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-input);
+}
+
+.health-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-muted);
+}
+
+.health-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.health-btn.on-track.active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.health-btn.at-risk.active {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.health-btn.off-track.active {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.weekly-unsaved-badge {
+  font-size: 12px;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* Snapshot grid */
+.weekly-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.weekly-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.weekly-stat-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.weekly-stat-icon-wrapper.success {
+  background: var(--success-bg);
+}
+
+.weekly-stat-icon-wrapper.info {
+  background: var(--info-bg);
+}
+
+.weekly-stat-icon-wrapper.danger {
+  background: var(--danger-bg);
+}
+
+.weekly-stat-icon-wrapper.warning {
+  background: var(--warning-bg);
+}
+
+.weekly-stat-icon-wrapper.purple {
+  background: var(--purple-bg);
+}
+
+.weekly-stat-icon-wrapper.neutral {
+  background: var(--bg-muted);
+}
+
+.weekly-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.weekly-stat-number {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.weekly-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Comparison */
+.weekly-comparison-banner {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.weekly-comparison-chips {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weekly-comparison-chips .chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+/* Tabs */
+.weekly-tabs-container {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.weekly-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.weekly-tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.weekly-tab-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Breakdown & items */
+.weekly-items-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .weekly-items-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.weekly-bullet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weekly-bullet-list li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.weekly-markdown-preview {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.weekly-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+}
+
+
