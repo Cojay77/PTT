@@ -109,9 +109,9 @@ export function seedDemoData(): void {
   decisionQueries.create({ title: 'Azure AD tenant — dedicated or shared?', context: 'Infrastructure decision: should the portal use the client\'s existing Azure AD tenant or create a dedicated one for isolation?', finalDecision: 'Use existing Azure AD tenant with dedicated App Registration. Agreed with Marc Lefort and Anna Schreiber on 2026-05-12.', status: 'approved', owner: 'Anna Schreiber', decisionDate: '2026-05-12' });
 
   // Actions
-  actionQueries.create({ action: 'Follow up with Marc Lefort on firewall ticket #NET-4421', owner: 'Jean-Baptiste Martin', dueDate: relDate(1), status: 'open', source: 'Issue: UAT environment inaccessible' });
-  actionQueries.create({ action: 'Send escalation email to Claire Fontaine if firewall not resolved by Sept 19', owner: 'Jean-Baptiste Martin', dueDate: relDate(2), status: 'open', source: 'Risk: Firewall delay' });
-  actionQueries.create({ action: 'Ask Karim to benchmark reporting queries with indexes', owner: 'Jean-Baptiste Martin', dueDate: relDate(1), status: 'open', source: 'Issue: Reporting performance' });
+  const act1 = actionQueries.create({ action: 'Follow up with Marc Lefort on firewall ticket #NET-4421', owner: 'Jean-Baptiste Martin', dueDate: relDate(1), status: 'open', source: 'Weekly Project Sync' });
+  const act2 = actionQueries.create({ action: 'Send escalation email to Claire Fontaine if firewall not resolved by Sept 19', owner: 'Jean-Baptiste Martin', dueDate: relDate(2), status: 'open', source: 'Weekly Project Sync' });
+  const act3 = actionQueries.create({ action: 'Ask Karim to benchmark reporting queries with indexes', owner: 'Jean-Baptiste Martin', dueDate: relDate(1), status: 'open', source: 'Weekly Project Sync' });
   actionQueries.create({ action: 'Prepare sprint replanning for Sophie\'s absence period', owner: 'Jean-Baptiste Martin', dueDate: relDate(4), status: 'open', source: 'Risk: Lead developer absence' });
   actionQueries.create({ action: 'Confirm with Isabelle Moreau — UAT pilot customer list status', owner: 'Jean-Baptiste Martin', dueDate: relDate(3), status: 'open', source: 'Task: Identify UAT pilot customers' });
   actionQueries.create({ action: 'Review Thomas Renard\'s export dialog mockup', owner: 'Jean-Baptiste Martin', dueDate: relDate(2), status: 'in-progress', source: 'Task: Complete reporting module UI' });
@@ -125,8 +125,38 @@ export function seedDemoData(): void {
   communicationQueries.create({ subject: 'SSO integration — Azure AD App Registration approved', type: 'email', sender: 'Marc Lefort', recipients: 'Jean-Baptiste Martin, Sophie Leclerc', date: relDate(-45), channel: 'Email', summary: 'Client IT confirms Azure AD App Registration is approved and credentials sent to Sophie.', actualResponse: 'App registration approved. Credentials sent to Sophie Leclerc. Note: Production tenant requires additional approval in November.', responseDate: relDate(-45), status: 'response-received', followUpRequired: false });
 
   // Meetings
-  meetingQueries.create({ title: 'Weekly Project Sync — Week 37', date: relDate(-4), type: 'project-meeting', participants: 'Jean-Baptiste Martin, Sophie Leclerc, Karim Benali, Lucie Vernet', agenda: '1. Phase 3 progress update\n2. Firewall issue status\n3. Reporting module performance issue\n4. Sprint planning for next week', notes: '## Progress\n- Reporting module UI: 8 days remaining (Sophie)\n- Mobile responsiveness: 60% done (Sophie)\n- Migration dry-run script: ready for testing (Karim)\n\n## Firewall Issue\nStill blocked. JB to escalate if not resolved by Sept 19.\n\n## Performance Issue\nKarim found 3 unindexed queries. Fix in progress, should reduce P95 from 8.3s to <3s.', decisions: 'Escalate firewall to CTO on Sept 19 if unresolved.', actions: 'JB: Follow up with Marc daily\nKarim: Apply index fix and re-benchmark\nSophie: Complete reporting UI before leave', risksIdentified: 'Resource risk during Sophie leave period (Sept 22 - Oct 1)', blockersIdentified: 'Firewall rules — UAT environment fully blocked' });
-  meetingQueries.create({ title: 'Steering Committee — September 2026', date: relDate(7), type: 'steering-committee', participants: 'Claire Fontaine, Marc Lefort, Jean-Baptiste Martin', agenda: '1. Phase 3 status and risks\n2. Go/No-Go decision for Sept 30 delivery\n3. Phase 4 planning\n4. Budget review', notes: '', decisions: '', actions: '' });
+  const mtg1 = meetingQueries.create({
+    title: 'Weekly Project Sync — Week 37',
+    date: relDate(-4),
+    type: 'project-meeting',
+    participants: 'Jean-Baptiste Martin, Sophie Leclerc, Karim Benali, Lucie Vernet',
+    agenda: '1. Phase 3 progress update\n2. Firewall issue status\n3. Reporting module performance issue\n4. Sprint planning for next week',
+    notes: '## Progress\n- Reporting module UI: 8 days remaining (Sophie)\n- Mobile responsiveness: 60% done (Sophie)\n- Migration dry-run script: ready for testing (Karim)\n\n## Firewall Issue\nStill blocked. JB to escalate if not resolved by Sept 19.\n\n## Performance Issue\nKarim found 3 unindexed queries. Fix in progress, should reduce P95 from 8.3s to <3s.',
+    decisions: 'Escalate firewall to CTO on Sept 19 if unresolved.',
+    actions: 'JB: Follow up with Marc daily\nKarim: Apply index fix and re-benchmark\nSophie: Complete reporting UI before leave',
+    risksIdentified: 'Resource risk during Sophie leave period (Sept 22 - Oct 1)',
+    blockersIdentified: 'Firewall rules — UAT environment fully blocked',
+    relatedActionIds: `${act1.id},${act2.id},${act3.id}`,
+    relatedTaskIds: `${t1.id},${t2.id}`,
+    relatedDecisionIds: `${d1.id}`,
+  });
+  actionQueries.update(act1.id, { relatedMeetingId: mtg1.id });
+  actionQueries.update(act2.id, { relatedMeetingId: mtg1.id });
+  actionQueries.update(act3.id, { relatedMeetingId: mtg1.id });
+  decisionQueries.update(d1.id, { relatedMeetingId: mtg1.id });
+
+  meetingQueries.create({
+    title: 'Steering Committee — September 2026',
+    date: relDate(7),
+    type: 'steering-committee',
+    participants: 'Claire Fontaine, Marc Lefort, Jean-Baptiste Martin',
+    agenda: '1. Phase 3 status and risks\n2. Go/No-Go decision for Sept 30 delivery\n3. Phase 4 planning\n4. Budget review',
+    notes: '',
+    decisions: '',
+    actions: '',
+    relatedDecisionIds: `${d1.id}`,
+    relatedTaskIds: `${t1.id}`,
+  });
 
   // Notes
   noteQueries.create({ title: 'Key contacts & escalation path', category: 'organization', isPinned: true, content: '## Client escalation path\n1. **First point of contact**: Marc Lefort (IT Director) — m.lefort@client.com\n2. **Escalation**: Claire Fontaine (CTO) — c.fontaine@client.com\n3. **Emergency**: Direct call to Claire +33 6 XX XX XX XX\n\n## CloudArch escalation\n1. Anna Schreiber (direct) — a.schreiber@cloudarch.com\n2. Pierre Duval (Account Manager) — p.duval@cloudarch.com\n\n## Internal escalation\n1. JB Martin (PM)\n2. Direction if budget impact > €20k\n\n## Important: Always CC Marc Lefort on infrastructure emails.' });

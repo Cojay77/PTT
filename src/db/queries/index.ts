@@ -166,6 +166,7 @@ function rowToDecision(r: Record<string, unknown>): Decision {
     deadline: (r.deadline as string) || '', impact: (r.impact as string) || '',
     status: r.status as Decision['status'], relatedTaskIds: (r.related_task_ids as string) || '',
     relatedRiskIds: (r.related_risk_ids as string) || '', relatedMilestoneId: (r.related_milestone_id as string) || null,
+    relatedMeetingId: (r.related_meeting_id as string) || null,
     notes: (r.notes as string) || '', createdAt: r.created_at as string, updatedAt: r.updated_at as string,
   };
 }
@@ -176,13 +177,13 @@ export const decisionQueries = {
   getPending(): Decision[] { return query<Record<string, unknown>>(`SELECT * FROM decisions WHERE status IN ('proposed','under-discussion','decision-required') ORDER BY deadline ASC, created_at DESC`).map(rowToDecision); },
   create(m: Partial<Decision>): Decision {
     const id = generateId(); const now = new Date().toISOString();
-    execute(`INSERT INTO decisions (id, title, context, decision_required, alternatives_considered, final_decision, owner, contributors, decision_date, deadline, impact, status, related_task_ids, related_risk_ids, related_milestone_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, m.title || 'New Decision', m.context || '', m.decisionRequired || '', m.alternativesConsidered || '', m.finalDecision || '', m.owner || '', m.contributors || '', m.decisionDate || '', m.deadline || '', m.impact || '', m.status || 'proposed', m.relatedTaskIds || '', m.relatedRiskIds || '', m.relatedMilestoneId || null, m.notes || '', now, now]);
+    execute(`INSERT INTO decisions (id, title, context, decision_required, alternatives_considered, final_decision, owner, contributors, decision_date, deadline, impact, status, related_task_ids, related_risk_ids, related_milestone_id, related_meeting_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, m.title || 'New Decision', m.context || '', m.decisionRequired || '', m.alternativesConsidered || '', m.finalDecision || '', m.owner || '', m.contributors || '', m.decisionDate || '', m.deadline || '', m.impact || '', m.status || 'proposed', m.relatedTaskIds || '', m.relatedRiskIds || '', m.relatedMilestoneId || null, m.relatedMeetingId || null, m.notes || '', now, now]);
     return this.getById(id)!;
   },
   update(id: string, updates: Partial<Decision>): Decision | null {
     const now = new Date().toISOString();
-    const map: Record<string, string> = { title: 'title', context: 'context', decisionRequired: 'decision_required', alternativesConsidered: 'alternatives_considered', finalDecision: 'final_decision', owner: 'owner', contributors: 'contributors', decisionDate: 'decision_date', deadline: 'deadline', impact: 'impact', status: 'status', relatedTaskIds: 'related_task_ids', relatedRiskIds: 'related_risk_ids', relatedMilestoneId: 'related_milestone_id', notes: 'notes' };
+    const map: Record<string, string> = { title: 'title', context: 'context', decisionRequired: 'decision_required', alternativesConsidered: 'alternatives_considered', finalDecision: 'final_decision', owner: 'owner', contributors: 'contributors', decisionDate: 'decision_date', deadline: 'deadline', impact: 'impact', status: 'status', relatedTaskIds: 'related_task_ids', relatedRiskIds: 'related_risk_ids', relatedMilestoneId: 'related_milestone_id', relatedMeetingId: 'related_meeting_id', notes: 'notes' };
     const fields: string[] = [], values: (string | number | null | boolean)[] = [];
     for (const [k, col] of Object.entries(map)) { if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof Decision] as string | null); } }
     if (!fields.length) return this.getById(id);
@@ -426,7 +427,11 @@ function rowToMeeting(r: Record<string, unknown>): Meeting {
     agenda: (r.agenda as string) || '', notes: (r.notes as string) || '',
     decisions: (r.decisions as string) || '', actions: (r.actions as string) || '',
     risksIdentified: (r.risks_identified as string) || '', blockersIdentified: (r.blockers_identified as string) || '',
-    followUps: (r.follow_ups as string) || '', createdAt: r.created_at as string, updatedAt: r.updated_at as string,
+    followUps: (r.follow_ups as string) || '',
+    relatedActionIds: (r.related_action_ids as string) || '',
+    relatedTaskIds: (r.related_task_ids as string) || '',
+    relatedDecisionIds: (r.related_decision_ids as string) || '',
+    createdAt: r.created_at as string, updatedAt: r.updated_at as string,
   };
 }
 
@@ -435,13 +440,19 @@ export const meetingQueries = {
   getById(id: string): Meeting | null { const r = queryOne<Record<string, unknown>>(`SELECT * FROM meetings WHERE id = ?`, [id]); return r ? rowToMeeting(r) : null; },
   create(m: Partial<Meeting>): Meeting {
     const id = generateId(); const now = new Date().toISOString();
-    execute(`INSERT INTO meetings (id, title, date, type, participants, agenda, notes, decisions, actions, risks_identified, blockers_identified, follow_ups, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, m.title || 'New Meeting', m.date || now.split('T')[0], m.type || 'project-meeting', m.participants || '', m.agenda || '', m.notes || '', m.decisions || '', m.actions || '', m.risksIdentified || '', m.blockersIdentified || '', m.followUps || '', now, now]);
+    execute(`INSERT INTO meetings (id, title, date, type, participants, agenda, notes, decisions, actions, risks_identified, blockers_identified, follow_ups, related_action_ids, related_task_ids, related_decision_ids, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, m.title || 'New Meeting', m.date || now.split('T')[0], m.type || 'project-meeting', m.participants || '', m.agenda || '', m.notes || '', m.decisions || '', m.actions || '', m.risksIdentified || '', m.blockersIdentified || '', m.followUps || '', m.relatedActionIds || '', m.relatedTaskIds || '', m.relatedDecisionIds || '', now, now]);
     return this.getById(id)!;
   },
   update(id: string, updates: Partial<Meeting>): Meeting | null {
     const now = new Date().toISOString();
-    const map: Record<string, string> = { title: 'title', date: 'date', type: 'type', participants: 'participants', agenda: 'agenda', notes: 'notes', decisions: 'decisions', actions: 'actions', risksIdentified: 'risks_identified', blockersIdentified: 'blockers_identified', followUps: 'follow_ups' };
+    const map: Record<string, string> = {
+      title: 'title', date: 'date', type: 'type', participants: 'participants',
+      agenda: 'agenda', notes: 'notes', decisions: 'decisions', actions: 'actions',
+      risksIdentified: 'risks_identified', blockersIdentified: 'blockers_identified',
+      followUps: 'follow_ups', relatedActionIds: 'related_action_ids',
+      relatedTaskIds: 'related_task_ids', relatedDecisionIds: 'related_decision_ids'
+    };
     const fields: string[] = [], values: (string | number | null | boolean)[] = [];
     for (const [k, col] of Object.entries(map)) { if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof Meeting] as string); } }
     if (!fields.length) return this.getById(id);

@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit3, Zap } from 'lucide-react';
+import { Plus, Trash2, Edit3, Zap, CalendarCheck } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { ActionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
 import type { Action, ActionStatus } from '../types';
 
 function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: () => void }) {
-  const { createAction, updateAction } = useDataStore();
+  const { createAction, updateAction, meetings } = useDataStore();
   const isEdit = Boolean(action?.id);
-  const [form, setForm] = useState<Partial<Action>>({ action: '', owner: '', dueDate: '', status: 'open', source: '', notes: '', ...action });
+  const [form, setForm] = useState<Partial<Action>>({ action: '', owner: '', dueDate: '', status: 'open', source: '', relatedMeetingId: null, notes: '', ...action });
   function save() { if (!form.action?.trim()) return; if (isEdit) updateAction(action!.id!, form); else createAction(form); onClose(); }
   const f = (k: keyof Action) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
   return (
@@ -19,6 +19,21 @@ function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: (
         <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
         <div className="form-group"><label className="form-label">Due Date</label><input className="input" type="date" value={form.dueDate || ''} onChange={f('dueDate')} /></div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{(['open', 'in-progress', 'done', 'cancelled'] as ActionStatus[]).map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>
+        <div className="form-group">
+          <label className="form-label">Related Meeting</label>
+          <select
+            className="select"
+            value={form.relatedMeetingId || ''}
+            onChange={e => setForm(p => ({ ...p, relatedMeetingId: e.target.value || null }))}
+          >
+            <option value="">No related meeting</option>
+            {meetings.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.date ? `${m.date} — ` : ''}{m.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Source</label><input className="input" value={form.source || ''} onChange={f('source')} placeholder="Where this action came from..." /></div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Notes</label><textarea className="textarea" rows={2} value={form.notes || ''} onChange={f('notes')} /></div>
       </div>
@@ -27,7 +42,7 @@ function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: (
 }
 
 export default function Actions() {
-  const { actions, deleteAction, updateAction } = useDataStore();
+  const { actions, meetings, deleteAction, updateAction } = useDataStore();
   const [edit, setEdit] = useState<Partial<Action> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('open');
@@ -93,7 +108,23 @@ export default function Actions() {
                     <td style={{ color: 'var(--text-secondary)' }}>{a.owner || '—'}</td>
                     <td style={{ color: isOverdue ? 'var(--danger)' : 'inherit' }}><DateDisplay date={a.dueDate} /></td>
                     <td><ActionBadge status={a.status} /></td>
-                    <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 160 }} className="truncate">{a.source || '—'}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 180 }}>
+                      <div className="truncate">{a.source || '—'}</div>
+                      {a.relatedMeetingId && (
+                        <div style={{ marginTop: 2 }}>
+                          <span
+                            className="badge badge-sm badge-neutral"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '1px 6px' }}
+                            title={`Linked to meeting: ${meetings.find(m => m.id === a.relatedMeetingId)?.title || ''}`}
+                          >
+                            <CalendarCheck size={10} />
+                            <span className="truncate" style={{ maxWidth: 120 }}>
+                              {meetings.find(m => m.id === a.relatedMeetingId)?.title || 'Meeting'}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                         {a.status !== 'done' && <button className="btn btn-sm btn-secondary" onClick={e => markDone(a.id, e)}>✓ Done</button>}

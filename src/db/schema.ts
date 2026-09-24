@@ -239,6 +239,7 @@ CREATE TABLE IF NOT EXISTS decisions (
   related_task_ids TEXT DEFAULT '',
   related_risk_ids TEXT DEFAULT '',
   related_milestone_id TEXT DEFAULT NULL,
+  related_meeting_id TEXT DEFAULT NULL,
   notes TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -280,6 +281,9 @@ CREATE TABLE IF NOT EXISTS meetings (
   risks_identified TEXT DEFAULT '',
   blockers_identified TEXT DEFAULT '',
   follow_ups TEXT DEFAULT '',
+  related_action_ids TEXT DEFAULT '',
+  related_task_ids TEXT DEFAULT '',
+  related_decision_ids TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -408,5 +412,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 `;
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 

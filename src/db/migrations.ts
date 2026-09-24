@@ -87,7 +87,30 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_change_requests_priority ON change_requests(priority);
     `,
   },
+  {
+    version: 4,
+    up: `
+      ALTER TABLE meetings ADD COLUMN related_action_ids TEXT DEFAULT '';
+      ALTER TABLE meetings ADD COLUMN related_task_ids TEXT DEFAULT '';
+      ALTER TABLE meetings ADD COLUMN related_decision_ids TEXT DEFAULT '';
+      ALTER TABLE decisions ADD COLUMN related_meeting_id TEXT DEFAULT NULL;
+    `,
+  },
 ];
+
+function safeRunMigration(db: Database, sql: string) {
+  const statements = sql.split(';').map(s => s.trim()).filter(Boolean);
+  for (const stmt of statements) {
+    try {
+      db.run(stmt);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes('duplicate column')) {
+        console.warn('Migration statement warning:', msg, stmt);
+      }
+    }
+  }
+}
 
 export async function runMigrations(db: Database): Promise<void> {
   // Ensure schema_version table has current version
@@ -101,7 +124,7 @@ export async function runMigrations(db: Database): Promise<void> {
 
   for (const migration of MIGRATIONS) {
     if (migration.version > currentVersion) {
-      db.run(migration.up);
+      safeRunMigration(db, migration.up);
       db.run(`INSERT INTO schema_version (version) VALUES (?)`, [migration.version]);
       console.log(`Applied migration v${migration.version}`);
     }

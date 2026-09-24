@@ -223,6 +223,7 @@ export interface Decision {
   relatedTaskIds: string;
   relatedRiskIds: string;
   relatedMilestoneId: ID | null;
+  relatedMeetingId?: ID | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -255,6 +256,9 @@ export interface Meeting {
   risksIdentified: string;
   blockersIdentified: string;
   followUps: string;
+  relatedActionIds?: string;
+  relatedTaskIds?: string;
+  relatedDecisionIds?: string;
   createdAt: string;
   updatedAt: string;
 }

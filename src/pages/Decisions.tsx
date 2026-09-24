@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit3, Scale } from 'lucide-react';
+import { Plus, Trash2, Edit3, Scale, CalendarCheck } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { DecisionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
 import type { Decision, DecisionStatus } from '../types';
@@ -7,12 +7,12 @@ import type { Decision, DecisionStatus } from '../types';
 const STATUSES: DecisionStatus[] = ['proposed', 'under-discussion', 'decision-required', 'approved', 'rejected', 'superseded'];
 
 function DecisionModal({ decision, onClose }: { decision?: Partial<Decision>; onClose: () => void }) {
-  const { createDecision, updateDecision } = useDataStore();
-  const milestones = useDataStore(s => s.milestones);
+  const { createDecision, updateDecision, milestones, meetings } = useDataStore();
   const isEdit = Boolean(decision?.id);
   const [form, setForm] = useState<Partial<Decision>>({
     title: '', context: '', decisionRequired: '', alternativesConsidered: '', finalDecision: '',
-    owner: '', contributors: '', decisionDate: '', deadline: '', impact: '', status: 'proposed', notes: '', ...decision,
+    owner: '', contributors: '', decisionDate: '', deadline: '', impact: '', status: 'proposed',
+    relatedMilestoneId: null, relatedMeetingId: null, notes: '', ...decision,
   });
   function save() { if (!form.title?.trim()) return; if (isEdit) updateDecision(decision!.id!, form); else createDecision(form); onClose(); }
   const f = (k: keyof Decision) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
@@ -34,6 +34,21 @@ function DecisionModal({ decision, onClose }: { decision?: Partial<Decision>; on
             {milestones.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
+        <div className="form-group">
+          <label className="form-label">Related Meeting</label>
+          <select
+            className="select"
+            value={form.relatedMeetingId || ''}
+            onChange={e => setForm(p => ({ ...p, relatedMeetingId: e.target.value || null }))}
+          >
+            <option value="">No related meeting</option>
+            {meetings.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.date ? `${m.date} — ` : ''}{m.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Context</label><textarea className="textarea" rows={3} value={form.context || ''} onChange={f('context')} /></div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Decision Required</label><textarea className="textarea" rows={2} value={form.decisionRequired || ''} onChange={f('decisionRequired')} /></div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Alternatives Considered</label><textarea className="textarea" rows={3} value={form.alternativesConsidered || ''} onChange={f('alternativesConsidered')} /></div>
@@ -46,7 +61,7 @@ function DecisionModal({ decision, onClose }: { decision?: Partial<Decision>; on
 }
 
 export default function Decisions() {
-  const { decisions, deleteDecision } = useDataStore();
+  const { decisions, meetings, deleteDecision } = useDataStore();
   const [edit, setEdit] = useState<Partial<Decision> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
@@ -89,10 +104,22 @@ export default function Decisions() {
                 <div className="card-body">
                   <div className="flex items-start gap-3">
                     <div style={{ flex: 1 }}>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span style={{ fontWeight: 700 }}>{d.title}</span>
                         <DecisionBadge status={d.status} />
                         {isUrgent && <span className="badge priority-critical">Overdue deadline</span>}
+                        {d.relatedMeetingId && (
+                          <span
+                            className="badge badge-sm badge-neutral"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '1px 6px' }}
+                            title={`Linked to meeting: ${meetings.find(m => m.id === d.relatedMeetingId)?.title || ''}`}
+                          >
+                            <CalendarCheck size={10} />
+                            <span className="truncate" style={{ maxWidth: 140 }}>
+                              {meetings.find(m => m.id === d.relatedMeetingId)?.title || 'Meeting'}
+                            </span>
+                          </span>
+                        )}
                       </div>
                       {d.context && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 6 }}>{d.context.slice(0, 160)}</p>}
                       {d.decisionRequired && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', fontWeight: 500 }}>❓ {d.decisionRequired.slice(0, 120)}</p>}
