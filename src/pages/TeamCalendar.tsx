@@ -527,6 +527,7 @@ export default function TeamCalendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [view, setView] = useState<'team' | 'month' | 'list'>('team');
   const [showWeekends, setShowWeekends] = useState(false);
+  const [showMilestones, setShowMilestones] = useState(true);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -667,6 +668,41 @@ export default function TeamCalendar() {
 
     return conflicts;
   }, [stakeholders, stakeholderAbsences, milestonesByDate]);
+
+  // Team Member Absences vs Milestone Scheduling Conflicts
+  const teamMilestoneConflicts = useMemo(() => {
+    const conflicts: Array<{
+      milestone: Milestone;
+      resource: Resource | undefined;
+      absence: Absence;
+      dateStr: string;
+    }> = [];
+
+    filteredAbsences.forEach(abs => {
+      try {
+        const start = parseISO(abs.startDate);
+        const end = parseISO(abs.endDate);
+        const days = eachDayOfInterval({ start, end });
+        days.forEach(day => {
+          const dStr = format(day, 'yyyy-MM-dd');
+          const msList = milestonesByDate[dStr];
+          if (msList && msList.length > 0) {
+            const res = resources.find(r => r.id === abs.resourceId);
+            msList.forEach(m => {
+              conflicts.push({
+                milestone: m,
+                resource: res,
+                absence: abs,
+                dateStr: dStr,
+              });
+            });
+          }
+        });
+      } catch {}
+    });
+
+    return conflicts;
+  }, [filteredAbsences, milestonesByDate, resources]);
 
   // Helper: Absences for a stakeholder on a specific day
   function getAbsencesForStakeholderDay(stakeholderId: string, day: Date): Absence[] {
@@ -1058,18 +1094,48 @@ export default function TeamCalendar() {
           </select>
         </div>
 
-        {/* Show Weekends Toggle (in Team View) */}
-        {view === 'team' && (
-          <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>
+        {/* Right side toggles: Milestones & Weekends */}
+        <div className="flex items-center gap-4" style={{ marginLeft: 'auto' }}>
+          {/* Show Milestones Toggle */}
+          <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer' }}>
             <input
               type="checkbox"
-              checked={showWeekends}
-              onChange={e => setShowWeekends(e.target.checked)}
+              checked={showMilestones}
+              onChange={e => setShowMilestones(e.target.checked)}
               style={{ cursor: 'pointer' }}
             />
-            <span style={{ color: 'var(--text-secondary)' }}>Show weekends</span>
+            <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span>🎯</span> Show milestones
+              {monthMilestones.length > 0 && (
+                <span
+                  className="badge badge-sm"
+                  style={{
+                    fontSize: 10,
+                    padding: '1px 5px',
+                    background: showMilestones ? 'rgba(247, 154, 79, 0.2)' : 'var(--bg-elevated)',
+                    color: showMilestones ? 'var(--warning)' : 'var(--text-muted)',
+                    border: showMilestones ? '1px solid rgba(247, 154, 79, 0.4)' : '1px solid var(--border)',
+                  }}
+                >
+                  {monthMilestones.length}
+                </span>
+              )}
+            </span>
           </label>
-        )}
+
+          {/* Show Weekends Toggle (in Team View) */}
+          {view === 'team' && (
+            <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showWeekends}
+                onChange={e => setShowWeekends(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <span style={{ color: 'var(--text-secondary)' }}>Show weekends</span>
+            </label>
+          )}
+        </div>
 
         {(filterResource !== 'all' || filterType !== 'all' || searchQuery) && (
           <button
@@ -1085,6 +1151,70 @@ export default function TeamCalendar() {
           </button>
         )}
       </div>
+
+      {/* Team Milestone Conflict Alert Banner */}
+      {showMilestones && teamMilestoneConflicts.length > 0 && (
+        <div
+          className="alert-banner"
+          style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderColor: 'var(--danger)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+          }}
+        >
+          <AlertTriangle size={20} color="var(--danger)" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 13, marginBottom: 4 }}>
+              ⚠️ Team Milestone Availability Conflict Detected ({teamMilestoneConflicts.length})
+            </div>
+            <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, color: 'var(--text-primary)' }}>
+              {teamMilestoneConflicts.map((c, idx) => (
+                <div key={idx}>
+                  • <strong>{c.resource?.name || c.absence.resourceName}</strong> ({c.resource?.role || 'Team Member'}) is absent on <strong>{c.dateStr}</strong> during scheduled milestone <strong>"{c.milestone.name}"</strong> (Leave: {c.absence.startDate} → {c.absence.endDate}).
+                  {c.absence.notes && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>[{c.absence.notes}]</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6, fontWeight: 500 }}>
+              Action Recommended: Review sprint capacity, reassign critical deliverables, or adjust milestone schedule.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Milestones Strip for this month */}
+      {showMilestones && monthMilestones.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, background: 'var(--bg-elevated)', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+          <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 10 }}>
+            Milestones This Month:
+          </span>
+          {monthMilestones.map(m => (
+            <div
+              key={m.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'var(--bg-surface)',
+                padding: '3px 8px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <span>🎯</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.targetDate}:</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{m.name}</span>
+              <span className={`badge badge-sm badge-${m.status === 'completed' ? 'success' : m.status === 'at-risk' ? 'danger' : 'primary'}`} style={{ fontSize: 9 }}>
+                {m.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* VIEW 1: Team Matrix View */}
       {view === 'team' && (
@@ -1114,8 +1244,11 @@ export default function TeamCalendar() {
                     </div>
                   </th>
                   {teamViewDays.map(d => {
+                    const dateStr = format(d, 'yyyy-MM-dd');
                     const isCurrentDay = isSameDay(d, today);
                     const isSatSun = isWeekend(d);
+                    const dayMilestones = milestonesByDate[dateStr];
+                    const hasMilestone = Boolean(showMilestones && dayMilestones && dayMilestones.length > 0);
                     return (
                       <th
                         key={d.toISOString()}
@@ -1123,20 +1256,27 @@ export default function TeamCalendar() {
                           padding: '6px 2px',
                           textAlign: 'center',
                           minWidth: 34,
-                          background: isCurrentDay
+                          background: hasMilestone
+                            ? 'rgba(247, 154, 79, 0.2)'
+                            : isCurrentDay
                             ? 'var(--accent-soft)'
                             : isSatSun
                             ? 'var(--bg-hover)'
                             : 'var(--bg-elevated)',
-                          border: '1px solid var(--border)',
-                          color: isCurrentDay ? 'var(--accent)' : 'var(--text-secondary)',
-                          fontWeight: isCurrentDay ? 700 : 600,
+                          border: hasMilestone ? '2px solid var(--warning)' : '1px solid var(--border)',
+                          color: hasMilestone ? 'var(--warning)' : isCurrentDay ? 'var(--accent)' : 'var(--text-secondary)',
+                          fontWeight: hasMilestone || isCurrentDay ? 700 : 600,
                         }}
+                        title={hasMilestone ? `Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}` : undefined}
                       >
                         <div style={{ fontSize: 12 }}>{format(d, 'd')}</div>
-                        <div style={{ fontSize: 9, opacity: 0.8, textTransform: 'uppercase' }}>
-                          {format(d, 'EEE')}
-                        </div>
+                        {hasMilestone ? (
+                          <div style={{ fontSize: 9, color: 'var(--warning)', fontWeight: 800 }}>🎯</div>
+                        ) : (
+                          <div style={{ fontSize: 9, opacity: 0.8, textTransform: 'uppercase' }}>
+                            {format(d, 'EEE')}
+                          </div>
+                        )}
                       </th>
                     );
                   })}
@@ -1205,19 +1345,29 @@ export default function TeamCalendar() {
                           const dayAbsences = getAbsencesForResourceDay(r.id, d);
                           const dateStr = format(d, 'yyyy-MM-dd');
                           const hasAbsence = dayAbsences.length > 0;
+                          const dayMilestones = milestonesByDate[dateStr];
+                          const isMilestoneDay = Boolean(showMilestones && dayMilestones && dayMilestones.length > 0);
+                          const hasConflict = hasAbsence && isMilestoneDay;
 
                           return (
                             <td
                               key={d.toISOString()}
                               className={`team-matrix-cell${hasAbsence ? ' has-absence' : ' empty-cell'}`}
                               style={{
-                                background: isCurrentDay
+                                background: hasConflict
+                                  ? 'rgba(239, 68, 68, 0.2)'
+                                  : isCurrentDay
                                   ? 'var(--accent-soft)'
                                   : isSatSun
                                   ? 'var(--bg-hover)'
                                   : hasAbsence
                                   ? `${ABSENCE_COLORS[dayAbsences[0].type] || '#4f8ef7'}22`
                                   : 'var(--bg-surface)',
+                                border: hasConflict
+                                  ? '2px solid var(--danger)'
+                                  : isMilestoneDay
+                                  ? '1px dashed var(--warning)'
+                                  : '1px solid var(--border)',
                               }}
                               onClick={() => {
                                 if (hasAbsence) {
@@ -1227,12 +1377,33 @@ export default function TeamCalendar() {
                                 }
                               }}
                               title={
-                                hasAbsence
+                                hasConflict
+                                  ? `⚠️ CONFLICT: ${r.name} is absent during Milestone: ${dayMilestones.map(m => m.name).join(', ')} (${dayAbsences[0].startDate} → ${dayAbsences[0].endDate})\n${dayAbsences[0].notes || 'No notes'}\n(Click to edit)`
+                                  : hasAbsence
                                   ? `${r.name}: ${dayAbsences[0].type.toUpperCase()}\n${dayAbsences[0].startDate} → ${dayAbsences[0].endDate}\n${dayAbsences[0].notes || 'No notes'}\n(Click to edit)`
+                                  : isMilestoneDay
+                                  ? `Milestone: ${dayMilestones.map(m => m.name).join(', ')}. Click to log absence for ${r.name}.`
                                   : `Click to log absence for ${r.name} on ${dateStr}`
                               }
                             >
-                              {hasAbsence && (
+                              {hasConflict ? (
+                                <div
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    background: 'var(--danger)',
+                                    color: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    borderRadius: 'var(--radius-xs)',
+                                  }}
+                                >
+                                  ⚠️ GATE
+                                </div>
+                              ) : hasAbsence ? (
                                 <div
                                   className="team-matrix-absence-block"
                                   style={{
@@ -1244,7 +1415,20 @@ export default function TeamCalendar() {
                                     dayAbsences[0].type.slice(0, 3)
                                   ).toUpperCase()}
                                 </div>
-                              )}
+                              ) : isMilestoneDay ? (
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    opacity: 0.6,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    height: '100%',
+                                  }}
+                                >
+                                  🎯
+                                </div>
+                              ) : null}
                             </td>
                           );
                         })}
@@ -1267,7 +1451,7 @@ export default function TeamCalendar() {
               flexWrap: 'wrap',
             }}
           >
-            <span>💡 <strong>Tip:</strong> Click any empty cell to quickly log an absence for that member and date. Click an existing colored block to edit or delete it.</span>
+            <span>💡 <strong>Tip:</strong> Click any empty cell to quickly log an absence for that member and date. Click an existing colored block to edit or delete it.{showMilestones && ' Red cells (⚠️ GATE) indicate a team member will be absent on a milestone target date.'}</span>
           </div>
         </div>
       )}
@@ -1287,6 +1471,9 @@ export default function TeamCalendar() {
               const isCurrentDay = isSameDay(d, today);
               const dayAbsences = getAbsencesForDay(d);
               const dateStr = format(d, 'yyyy-MM-dd');
+              const dayMilestones = milestonesByDate[dateStr] || [];
+              const hasMilestone = Boolean(showMilestones && dayMilestones.length > 0);
+              const hasConflict = hasMilestone && dayAbsences.length > 0;
 
               return (
                 <div
@@ -1294,7 +1481,18 @@ export default function TeamCalendar() {
                   className="month-calendar-cell"
                   style={{
                     opacity: inMonth ? 1 : 0.35,
-                    background: isCurrentDay ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                    background: hasConflict
+                      ? 'rgba(239, 68, 68, 0.12)'
+                      : hasMilestone
+                      ? 'rgba(247, 154, 79, 0.08)'
+                      : isCurrentDay
+                      ? 'var(--accent-soft)'
+                      : 'var(--bg-surface)',
+                    border: hasConflict
+                      ? '1px solid var(--danger)'
+                      : hasMilestone
+                      ? '1px dashed var(--warning)'
+                      : undefined,
                   }}
                   onClick={e => {
                     // Only open create modal if clicking on the cell container directly
@@ -1304,22 +1502,32 @@ export default function TeamCalendar() {
                   }}
                 >
                   <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: isCurrentDay ? 800 : 600,
-                        color: isCurrentDay ? '#ffffff' : inMonth ? 'var(--text-primary)' : 'var(--text-muted)',
-                        width: 22,
-                        height: 22,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '50%',
-                        background: isCurrentDay ? 'var(--accent)' : 'transparent',
-                      }}
-                    >
-                      {format(d, 'd')}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: isCurrentDay ? 800 : 600,
+                          color: isCurrentDay ? '#ffffff' : inMonth ? 'var(--text-primary)' : 'var(--text-muted)',
+                          width: 22,
+                          height: 22,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '50%',
+                          background: isCurrentDay ? 'var(--accent)' : 'transparent',
+                        }}
+                      >
+                        {format(d, 'd')}
+                      </span>
+                      {hasMilestone && (
+                        <span
+                          title={`Milestone Gate: ${dayMilestones.map(m => m.name).join(', ')}`}
+                          style={{ fontSize: 11, cursor: 'help' }}
+                        >
+                          🎯
+                        </span>
+                      )}
+                    </div>
 
                     <button
                       className="btn-icon btn-ghost add-day-btn"
@@ -1334,14 +1542,63 @@ export default function TeamCalendar() {
                     </button>
                   </div>
 
+                  {/* Milestone Banner Pill on this day */}
+                  {hasMilestone && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+                      {dayMilestones.map(m => (
+                        <div
+                          key={m.id}
+                          style={{
+                            fontSize: 9,
+                            padding: '2px 5px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'rgba(247, 154, 79, 0.2)',
+                            color: 'var(--warning)',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            border: '1px solid rgba(247, 154, 79, 0.4)',
+                          }}
+                          title={`Milestone Gate: ${m.name} (${m.status})`}
+                        >
+                          <span style={{ fontSize: 9 }}>GATE:</span>
+                          <span className="truncate">{m.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Absences on this date */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
                     {dayAbsences.slice(0, 4).map(({ resource: res, absence }) => {
                       const color = ABSENCE_COLORS[absence.type] || '#4f8ef7';
                       const resName = res?.name || absence.resourceName || 'Unknown';
                       const firstName = resName.split(' ')[0];
+                      const isAbsenceConflict = hasMilestone;
 
-                      return (
+                      return isAbsenceConflict ? (
+                        <div
+                          key={`${absence.id}-${dateStr}`}
+                          className="month-absence-pill"
+                          style={{
+                            background: 'var(--danger)',
+                            color: '#ffffff',
+                            borderLeft: '3px solid #b91c1c',
+                            fontWeight: 700,
+                            fontSize: 10,
+                            boxShadow: '0 1px 3px rgba(239, 68, 68, 0.3)',
+                          }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleOpenEdit(absence);
+                          }}
+                          title={`⚠️ CONFLICT: ${resName} is absent during Milestone Gate "${dayMilestones.map(m => m.name).join(', ')}"\nNotes: ${absence.notes || 'None'}\n(Click to edit or resolve)`}
+                        >
+                          <span>⚠️</span>
+                          <span className="truncate">{firstName}: ABSENT (GATE)</span>
+                        </div>
+                      ) : (
                         <div
                           key={`${absence.id}-${dateStr}`}
                           className="month-absence-pill"
@@ -1381,7 +1638,7 @@ export default function TeamCalendar() {
           </div>
 
           <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-            💡 <strong>Tip:</strong> Hover over any day and click the <Plus size={10} style={{ display: 'inline' }} /> icon or click an empty day card to log an absence on that date. Click an absence pill to edit or delete it.
+            💡 <strong>Tip:</strong> Hover over any day and click the <Plus size={10} style={{ display: 'inline' }} /> icon or click an empty day card to log an absence on that date. Click an absence pill to edit or delete it.{showMilestones && ' Days with milestone gates are tagged with GATE (⚠️ GATE if a team member is absent).'}
           </div>
         </div>
       )}
@@ -1436,6 +1693,7 @@ export default function TeamCalendar() {
                     <th>Type</th>
                     <th>Date Range</th>
                     <th>Duration</th>
+                    {showMilestones && <th>Milestone Gate Conflict</th>}
                     <th>Notes & Handover</th>
                     <th style={{ width: 100, textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -1447,6 +1705,16 @@ export default function TeamCalendar() {
                     const color = ABSENCE_COLORS[abs.type] || '#4f8ef7';
                     const isUpcoming = abs.startDate > todayStr;
                     const isCurrent = abs.startDate <= todayStr && abs.endDate >= todayStr;
+
+                    const conflictingMilestones = monthMilestones.filter(m => {
+                      try {
+                        const mDate = parseISO(m.targetDate);
+                        return isWithinInterval(mDate, { start: parseISO(abs.startDate), end: parseISO(abs.endDate) });
+                      } catch {
+                        return false;
+                      }
+                    });
+                    const hasConflict = conflictingMilestones.length > 0;
 
                     return (
                       <tr key={abs.id}>
@@ -1503,6 +1771,19 @@ export default function TeamCalendar() {
                             ({dur.totalDays} calendar {dur.totalDays === 1 ? 'day' : 'days'})
                           </div>
                         </td>
+                        {showMilestones && (
+                          <td>
+                            {hasConflict ? (
+                              <span className="badge badge-danger" style={{ fontSize: 11, fontWeight: 700 }}>
+                                ⚠️ Gate Conflict: {conflictingMilestones.map(m => m.name).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="badge badge-success" style={{ fontSize: 11 }}>
+                                <CheckCircle2 size={12} style={{ marginRight: 4 }} /> No Gate Conflict
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td style={{ maxWidth: 300 }}>
                           <span style={{ color: abs.notes ? 'var(--text-secondary)' : 'var(--text-placeholder)' }}>
                             {abs.notes || '—'}
@@ -1581,6 +1862,13 @@ export default function TeamCalendar() {
             </div>
           ))}
         </div>
+        {showMilestones && (
+          <div className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>
+            <span>🎯</span>
+            <span style={{ fontWeight: 600 }}>Milestone Gate</span>
+            <span style={{ color: 'var(--text-muted)' }}>(⚠️ GATE = absence conflict)</span>
+          </div>
+        )}
       </div>
 
       {/* ============================================================
