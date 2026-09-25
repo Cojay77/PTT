@@ -5,13 +5,14 @@ import {
   UserCheck, UserX, Briefcase, Flag, AlertTriangle, ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
+import { useTaskStore } from '../store/useTaskStore';
 import { Avatar, Modal, EmptyState } from '../components/ui/shared';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO,
   isWithinInterval, addMonths, subMonths, isWeekend, startOfWeek, endOfWeek,
   differenceInCalendarDays
 } from 'date-fns';
-import type { Absence, Resource, Stakeholder, Milestone } from '../types';
+import type { Absence, Resource, Stakeholder, Milestone, Task } from '../types';
 
 export const ABSENCE_TYPES = [
   { value: 'vacation', label: 'Vacation / Annual Leave', color: '#4f8ef7', short: 'VAC' },
@@ -528,6 +529,8 @@ export default function TeamCalendar() {
   const [view, setView] = useState<'team' | 'month' | 'list'>('team');
   const [showWeekends, setShowWeekends] = useState(false);
   const [showMilestones, setShowMilestones] = useState(true);
+  const [showTasks, setShowTasks] = useState(false);
+  const tasks = useTaskStore(s => s.tasks);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -631,6 +634,29 @@ export default function TeamCalendar() {
       }
     });
   }, [milestones, monthStart, monthEnd]);
+
+  // Tasks mapped by due date (yyyy-MM-dd)
+  const tasksByDate = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    tasks.filter(t => !t.isBacklog && t.dueDate && t.status !== 'cancelled').forEach(t => {
+      if (!map[t.dueDate!]) map[t.dueDate!] = [];
+      map[t.dueDate!].push(t);
+    });
+    return map;
+  }, [tasks]);
+
+  // Tasks due in current month
+  const monthTasks = useMemo(() => {
+    return tasks.filter(t => {
+      if (!t.dueDate || t.isBacklog || t.status === 'cancelled') return false;
+      try {
+        const d = parseISO(t.dueDate);
+        return isWithinInterval(d, { start: monthStart, end: monthEnd });
+      } catch {
+        return false;
+      }
+    });
+  }, [tasks, monthStart, monthEnd]);
 
   // Stakeholder Absences vs Milestone Scheduling Conflicts
   const stakeholderMilestoneConflicts = useMemo(() => {
@@ -1123,6 +1149,33 @@ export default function TeamCalendar() {
             </span>
           </label>
 
+          {/* Show Tasks Due Toggle */}
+          <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showTasks}
+              onChange={e => setShowTasks(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span>📋</span> Show tasks due
+              {monthTasks.length > 0 && (
+                <span
+                  className="badge badge-sm"
+                  style={{
+                    fontSize: 10,
+                    padding: '1px 5px',
+                    background: showTasks ? 'rgba(59, 130, 246, 0.2)' : 'var(--bg-elevated)',
+                    color: showTasks ? 'var(--accent)' : 'var(--text-muted)',
+                    border: showTasks ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border)',
+                  }}
+                >
+                  {monthTasks.length}
+                </span>
+              )}
+            </span>
+          </label>
+
           {/* Show Weekends Toggle (in Team View) */}
           {view === 'team' && (
             <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer' }}>
@@ -1566,6 +1619,38 @@ export default function TeamCalendar() {
                           <span className="truncate">{m.name}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Tasks Due on this date */}
+                  {showTasks && (tasksByDate[dateStr] || []).length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+                      {(tasksByDate[dateStr] || []).slice(0, 3).map(t => (
+                        <div
+                          key={t.id}
+                          style={{
+                            fontSize: 9,
+                            padding: '1px 5px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: t.status === 'done' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: t.status === 'done' ? 'var(--success)' : 'var(--accent)',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                          }}
+                          title={`Task Due: ${t.title} (${t.status}) · Owner: ${t.owner || 'Unassigned'}`}
+                        >
+                          <span style={{ fontSize: 8 }}>{t.status === 'done' ? '✓' : '📋'}</span>
+                          <span className="truncate">{t.title}</span>
+                        </div>
+                      ))}
+                      {(tasksByDate[dateStr] || []).length > 3 && (
+                        <div style={{ fontSize: 8, color: 'var(--text-muted)', paddingLeft: 2 }}>
+                          +{(tasksByDate[dateStr] || []).length - 3} more tasks
+                        </div>
+                      )}
                     </div>
                   )}
 

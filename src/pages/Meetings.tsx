@@ -12,6 +12,8 @@ import {
 } from '../components/ui/shared';
 import type { Meeting, Action, Task, Decision, ActionStatus, TaskStatus, DecisionStatus, Priority } from '../types';
 import { format, parseISO } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const MEETING_TYPES = [
   'Project Meeting',
@@ -50,6 +52,7 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
 
   const isEdit = Boolean(meeting?.id);
   const [activeTab, setActiveTab] = useState<'details' | 'links'>('details');
+  const [previewMarkdown, setPreviewMarkdown] = useState(false);
 
   const [form, setForm] = useState<Partial<Meeting>>({
     title: '',
@@ -337,24 +340,80 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="form-group">
-              <label className="form-label">Agenda</label>
-              <textarea
-                className="textarea"
-                rows={5}
-                value={form.agenda || ''}
-                onChange={f('agenda')}
-                placeholder="1. Topic A&#10;2. Topic B&#10;3. Next steps"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="form-label" style={{ marginBottom: 0 }}>Agenda (Markdown)</label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  style={{ fontSize: 10, padding: '1px 6px', height: 'auto', minHeight: 20 }}
+                  onClick={() => setPreviewMarkdown(!previewMarkdown)}
+                >
+                  {previewMarkdown ? 'Edit' : 'Preview'}
+                </button>
+              </div>
+              {previewMarkdown ? (
+                <div
+                  className="prose prose-sm"
+                  style={{
+                    minHeight: 120,
+                    padding: '8px 12px',
+                    background: 'var(--bg-elevated)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    fontSize: 12,
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                  }}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{form.agenda || '*No agenda content*'}</ReactMarkdown>
+                </div>
+              ) : (
+                <textarea
+                  className="textarea"
+                  rows={5}
+                  value={form.agenda || ''}
+                  onChange={f('agenda')}
+                  placeholder="1. Topic A&#10;2. Topic B&#10;3. Next steps"
+                />
+              )}
             </div>
             <div className="form-group">
-              <label className="form-label">Meeting Notes</label>
-              <textarea
-                className="textarea"
-                rows={5}
-                value={form.notes || ''}
-                onChange={f('notes')}
-                placeholder="Key discussion points, outcomes, context..."
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="form-label" style={{ marginBottom: 0 }}>Meeting Notes (Markdown)</label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  style={{ fontSize: 10, padding: '1px 6px', height: 'auto', minHeight: 20 }}
+                  onClick={() => setPreviewMarkdown(!previewMarkdown)}
+                >
+                  {previewMarkdown ? 'Edit' : 'Preview'}
+                </button>
+              </div>
+              {previewMarkdown ? (
+                <div
+                  className="prose prose-sm"
+                  style={{
+                    minHeight: 120,
+                    padding: '8px 12px',
+                    background: 'var(--bg-elevated)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    fontSize: 12,
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                  }}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{form.notes || '*No notes content*'}</ReactMarkdown>
+                </div>
+              ) : (
+                <textarea
+                  className="textarea"
+                  rows={5}
+                  value={form.notes || ''}
+                  onChange={f('notes')}
+                  placeholder="Key discussion points, outcomes, context..."
+                />
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">Decisions Summary (Notes)</label>
@@ -1388,8 +1447,8 @@ export default function Meetings() {
                             <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
                               Agenda
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'pre-line' }}>
-                              {m.agenda}
+                            <div className="prose prose-sm" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.agenda}</ReactMarkdown>
                             </div>
                           </div>
                         )}
@@ -1398,8 +1457,8 @@ export default function Meetings() {
                             <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
                               Discussion Notes
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
-                              {m.notes}
+                            <div className="prose prose-sm" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.notes}</ReactMarkdown>
                             </div>
                           </div>
                         )}

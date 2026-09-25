@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useDataStore } from '../store/useDataStore';
+import { useTaskStore } from '../store/useTaskStore';
 import type { ChangeRequest } from '../types';
 import {
   PlusCircle, Pencil, Trash2, X, ChevronDown, ChevronUp, CheckCircle2,
-  Clock, AlertCircle, XCircle, GitMerge, Send, Eye, Filter,
+  Clock, AlertCircle, XCircle, GitMerge, Send, Eye, Filter, CheckSquare,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -64,6 +65,7 @@ type CrTab = 'open' | 'decided' | 'all';
 
 export default function ChangeRequests() {
   const { changeRequests, createChangeRequest, updateChangeRequest, deleteChangeRequest } = useDataStore();
+  const { createTask } = useTaskStore();
 
   const [activeTab, setActiveTab] = useState<CrTab>('open');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -74,6 +76,28 @@ export default function ChangeRequests() {
   const [form, setForm] = useState<Partial<ChangeRequest>>(emptyForm());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [taskCreatedMsg, setTaskCreatedMsg] = useState<string | null>(null);
+
+  function createImplementationTask(cr: ChangeRequest) {
+    const estHours = cr.estimatedDurationDays ? cr.estimatedDurationDays * 8 : 16;
+    const today = new Date();
+    const targetDate = cr.approvalDate || format(today, 'yyyy-MM-dd');
+    createTask({
+      title: `[CR] ${cr.title}`,
+      status: 'planned',
+      priority: cr.priority === 'critical' ? 'critical' : cr.priority === 'high' ? 'high' : 'medium',
+      description: `Implementation task for Change Request: ${cr.title}\n\nScope Impact: ${cr.impactScope || 'N/A'}\nSchedule Impact: ${cr.impactSchedule || 'N/A'}\nJustification: ${cr.justification || 'N/A'}`,
+      estimatedWorkload: estHours,
+      remainingWorkload: estHours,
+      actualWorkload: 0,
+      dueDate: targetDate,
+      category: 'Change Request',
+      tags: 'CR, implementation',
+      notes: `Generated from Change Request: ${cr.title}`,
+    });
+    setTaskCreatedMsg(`Implementation task created for "${cr.title}"`);
+    setTimeout(() => setTaskCreatedMsg(null), 4000);
+  }
 
   const openStatuses: ChangeRequest['status'][] = ['draft', 'submitted', 'under-review'];
   const decidedStatuses: ChangeRequest['status'][] = ['approved', 'rejected', 'withdrawn', 'implemented'];
@@ -145,6 +169,13 @@ export default function ChangeRequests() {
           <PlusCircle size={15} /> New Change Request
         </button>
       </div>
+
+      {taskCreatedMsg && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 16, background: 'var(--success-bg, rgba(34, 197, 94, 0.12))', border: '1px solid var(--success)', borderRadius: 'var(--radius-md)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}>
+          <CheckCircle2 size={16} />
+          <span>{taskCreatedMsg}</span>
+        </div>
+      )}
 
       {/* Summary KPI cards */}
       <div className="cr-kpi-grid mb-6">
@@ -360,9 +391,14 @@ export default function ChangeRequests() {
                           </>
                         )}
                         {cr.status === 'approved' && (
-                          <button className="btn btn-sm" style={{ background: 'var(--accent)', color: '#fff' }} onClick={() => quickStatusChange(cr.id, 'implemented')}>
-                            <GitMerge size={12} /> Mark Implemented
-                          </button>
+                          <>
+                            <button className="btn btn-sm" style={{ background: 'var(--accent)', color: '#fff' }} onClick={() => quickStatusChange(cr.id, 'implemented')}>
+                              <GitMerge size={12} /> Mark Implemented
+                            </button>
+                            <button className="btn btn-sm btn-secondary" onClick={() => createImplementationTask(cr)} title="Create implementation task for this approved CR">
+                              <CheckSquare size={12} /> Create Task
+                            </button>
+                          </>
                         )}
                       </div>
                       <div className="flex items-center gap-2 ml-auto">

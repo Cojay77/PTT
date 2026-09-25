@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Plus, Trash2, Edit3 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
+import { useTaskStore } from '../store/useTaskStore';
 import { Avatar, Modal, ConfirmDialog, EmptyState, ProgressBar } from '../components/ui/shared';
 import type { Resource, Absence } from '../types';
 import { UserCog } from 'lucide-react';
@@ -64,11 +65,21 @@ function AbsenceModal({ resources, onClose }: { resources: Resource[]; onClose: 
 
 export default function Resources() {
   const { resources, absences, deleteResource, deleteAbsence } = useDataStore();
+  const tasks = useTaskStore(s => s.tasks);
   const [editResource, setEditResource] = useState<Partial<Resource> | null>(null);
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Compute assigned workload from tasks for each resource (by name match on owner field)
+  const workloadByName = useMemo(() => {
+    const map: Record<string, number> = {};
+    tasks.filter(t => !t.isBacklog && !['done', 'cancelled'].includes(t.status)).forEach(t => {
+      if (t.owner) map[t.owner] = (map[t.owner] || 0) + (t.remainingWorkload || t.estimatedWorkload || 0);
+    });
+    return map;
+  }, [tasks]);
 
   return (
     <div>
@@ -87,6 +98,8 @@ export default function Resources() {
           {resources.map(r => {
             const rAbsences = absences.filter(a => a.resourceId === r.id && a.endDate >= today);
             const isCurrentlyAbsent = rAbsences.some(a => a.startDate <= today && a.endDate >= today);
+            const assignedWorkload = workloadByName[r.name] || 0;
+            const isOverloaded = r.plannedWorkload > 0 && assignedWorkload > r.plannedWorkload;
             return (
               <div key={r.id} className="card" style={{ cursor: 'pointer' }} onClick={() => setEditResource(r)}>
                 <div className="card-body">
@@ -98,7 +111,14 @@ export default function Resources() {
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--text-md)' }}>{r.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: 'var(--text-md)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {r.name}
+                        {isOverloaded && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '1px 7px', borderRadius: 99 }}>
+                            <AlertTriangle size={10} /> Over capacity
+                          </span>
+                        )}
+                      </div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>{r.role}</div>
                       {r.organization && <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{r.organization}</div>}
                     </div>
@@ -113,7 +133,17 @@ export default function Resources() {
                     </div>
                     <ProgressBar value={r.allocationPercent} max={100} color={r.allocationPercent > 100 ? 'var(--danger)' : r.allocationPercent >= 80 ? 'var(--warning)' : 'var(--success)'} />
                   </div>
-                  {r.plannedWorkload > 0 && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>Planned: {r.plannedWorkload}h</div>}
+                  {r.plannedWorkload > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Workload (assigned vs planned)</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isOverloaded ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                          {assignedWorkload}h / {r.plannedWorkload}h
+                        </span>
+                      </div>
+                      <ProgressBar value={assignedWorkload} max={r.plannedWorkload} color={isOverloaded ? 'var(--danger)' : assignedWorkload > r.plannedWorkload * 0.8 ? 'var(--warning)' : 'var(--success)'} />
+                    </div>
+                  )}
                   {r.skills && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>{r.skills}</div>}
                   {rAbsences.length > 0 && (
                     <div style={{ marginTop: 8 }}>

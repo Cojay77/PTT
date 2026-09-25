@@ -61,8 +61,14 @@ export function exportFullJson(data: {
   communications: Communication[];
   stakeholders: Stakeholder[];
   resources: Resource[];
+  budgetItems?: unknown[];
+  changeRequests?: unknown[];
+  weeklyReviews?: unknown[];
+  meetings?: unknown[];
+  notes?: unknown[];
 }): void {
   const jsonContent = JSON.stringify(data, null, 2);
   const dateStr = new Date().toISOString().split('T')[0];
   downloadFile(`project-export-${dateStr}.json`, jsonContent, 'application/json;charset=utf-8');
 }
+

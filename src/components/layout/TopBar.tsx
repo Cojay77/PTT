@@ -58,8 +58,14 @@ export default function TopBar() {
   const tasks = useTaskStore((s) => s.tasks);
   const { risks, issues, decisions, actions, communications } = useDataStore();
 
+  const DISMISSED_KEY = 'ptt_dismissed_alerts';
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem(DISMISSED_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
   const alertsRef = useRef<HTMLDivElement>(null);
 
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -324,11 +330,19 @@ export default function TopBar() {
 
   function dismissOne(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    setDismissedIds((prev) => new Set([...prev, id]));
+    setDismissedIds((prev) => {
+      const next = new Set([...prev, id]);
+      try { sessionStorage.setItem('ptt_dismissed_alerts', JSON.stringify([...next])); } catch { /* noop */ }
+      return next;
+    });
   }
 
   function dismissAll() {
-    setDismissedIds((prev) => new Set([...prev, ...activeAlerts.map((a) => a.id)]));
+    setDismissedIds((prev) => {
+      const next = new Set([...prev, ...activeAlerts.map((a) => a.id)]);
+      try { sessionStorage.setItem('ptt_dismissed_alerts', JSON.stringify([...next])); } catch { /* noop */ }
+      return next;
+    });
   }
 
   return (

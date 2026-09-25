@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, CheckSquare, Zap, Scale, MessageSquare, Shield,
@@ -43,11 +43,23 @@ function useProjectSnapshot() {
   const nextMilestone = upcomingMilestones[0];
   const daysToNextMilestone = nextMilestone?.targetDate ? differenceInDays(parseISO(nextMilestone.targetDate), new Date()) : null;
 
+  // Project health score (0 - 100)
+  let healthScore = 100;
+  healthScore -= Math.min(35, overdueTasks.length * 7);
+  healthScore -= Math.min(25, blockedTasks.length * 6);
+  healthScore -= Math.min(25, criticalRisks.length * 8);
+  healthScore -= Math.min(20, criticalIssues.length * 6);
+  healthScore -= Math.min(15, decisionRequired.length * 4);
+  healthScore = Math.max(0, Math.min(100, healthScore));
+
+  const healthLabel = healthScore >= 80 ? 'Healthy' : healthScore >= 60 ? 'Needs Attention' : 'At Risk';
+  const healthColor = healthScore >= 80 ? 'var(--success)' : healthScore >= 60 ? 'var(--warning)' : 'var(--danger)';
+
   return {
     config, taskStats, overdueTasks, blockedTasks, upcomingMilestones, openRisks, openIssues,
     pendingDecisions, openActions, overdueActions, awaitingComms, overdueComms, upcomingAbsences,
     activity, criticalRisks, criticalIssues, decisionRequired, progress, daysToDelivery,
-    nextMilestone, daysToNextMilestone, totalTasks, doneTasks,
+    nextMilestone, daysToNextMilestone, totalTasks, doneTasks, healthScore, healthLabel, healthColor,
   };
 }
 
@@ -129,6 +141,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const snap = useProjectSnapshot();
   const attentionItems = useMemo(() => buildAttentionItems(snap), [snap]);
+  const [activityExpanded, setActivityExpanded] = useState(false);
 
   const projectName = snap.config?.name || 'New Project';
   const projectStatus = snap.config?.status || 'on-track';
@@ -171,6 +184,14 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Health Score</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                <span style={{ fontWeight: 800, fontSize: 'var(--text-2xl)', color: snap.healthColor }}>{snap.healthScore}</span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>/100</span>
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: snap.healthColor }}>{snap.healthLabel}</div>
+            </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Progress</div>
               <div style={{ fontWeight: 800, fontSize: 'var(--text-2xl)', color: 'var(--text-primary)' }}>{snap.progress}%</div>
@@ -375,9 +396,18 @@ export default function Dashboard() {
             <div className="card-header">
               <Activity size={18} color="var(--accent)" />
               <span className="section-title">Recent Activity</span>
+              {snap.activity.length > 10 && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginLeft: 'auto', fontSize: 11 }}
+                  onClick={() => setActivityExpanded(e => !e)}
+                >
+                  {activityExpanded ? 'Show less' : `Show all ${snap.activity.length}`}
+                </button>
+              )}
             </div>
             <div style={{ padding: '8px 0' }}>
-              {snap.activity.slice(0, 10).map(a => (
+              {(activityExpanded ? snap.activity : snap.activity.slice(0, 10)).map(a => (
                 <div key={a.id} className="timeline-item" style={{ padding: '6px 20px' }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: 7 }} />
                   <div className="attention-content">

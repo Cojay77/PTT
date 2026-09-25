@@ -8,14 +8,30 @@ function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: (
   const { createAction, updateAction, meetings } = useDataStore();
   const isEdit = Boolean(action?.id);
   const [form, setForm] = useState<Partial<Action>>({ action: '', owner: '', dueDate: '', status: 'open', source: '', relatedMeetingId: null, notes: '', ...action });
-  function save() { if (!form.action?.trim()) return; if (isEdit) updateAction(action!.id!, form); else createAction(form); onClose(); }
+  const [actionError, setActionError] = useState(false);
+  function save() {
+    if (!form.action?.trim()) { setActionError(true); return; }
+    setActionError(false);
+    if (isEdit) updateAction(action!.id!, form); else createAction(form); onClose();
+  }
   const f = (k: keyof Action) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
   return (
     <Modal title={isEdit ? 'Edit Action' : 'New Action'} onClose={onClose}
       footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}
     >
       <div className="form-row">
-        <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label required">Action</label><textarea className="textarea" rows={2} value={form.action || ''} onChange={f('action')} autoFocus /></div>
+      <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+        <label className="form-label required">Action</label>
+        <textarea
+          className="textarea"
+          rows={2}
+          value={form.action || ''}
+          onChange={e => { setActionError(false); setForm(p => ({ ...p, action: e.target.value })); }}
+          style={actionError ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 2px var(--danger-bg)' } : undefined}
+          autoFocus
+        />
+        {actionError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4, fontWeight: 500 }}>⚠ Action description is required</div>}
+      </div>
         <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
         <div className="form-group"><label className="form-label">Due Date</label><input className="input" type="date" value={form.dueDate || ''} onChange={f('dueDate')} /></div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{(['open', 'in-progress', 'done', 'cancelled'] as ActionStatus[]).map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>

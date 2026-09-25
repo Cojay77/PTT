@@ -5,8 +5,8 @@ import { Download, Upload, Trash2, Sun, Moon, Database, RefreshCw } from 'lucide
 import { hasDemoData, seedDemoData } from '../data/demoData';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
-import { exportFullJson, exportTasksToCsv, exportRaidToCsv } from '../utils/export';
-import { projectConfigQueries } from '../db/queries';
+import { exportFullJson, exportTasksToCsv, exportRaidToCsv, exportToCsv } from '../utils/export';
+import { projectConfigQueries, activityQueries } from '../db/queries';
 
 export default function Settings() {
   const { theme, setTheme } = useUIStore();
@@ -126,6 +126,10 @@ export default function Settings() {
                     communications: dataStore.communications,
                     stakeholders: dataStore.stakeholders,
                     resources: dataStore.resources,
+                    budgetItems: dataStore.budgetItems,
+                    changeRequests: dataStore.changeRequests,
+                    meetings: dataStore.meetings,
+                    notes: dataStore.notes,
                   });
                 }}
               >
@@ -145,6 +149,17 @@ export default function Settings() {
                 }}
               >
                 <Download size={14} /> Export RAID Log (CSV)
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  const log = activityQueries.getRecent(9999);
+                  const headers = ['Date', 'Entity Type', 'Entity Title', 'Action', 'Details'];
+                  const rows = log.map(a => [a.createdAt, a.entityType, a.entityTitle, a.action, a.description || '']);
+                  exportToCsv(`audit-trail-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+                }}
+              >
+                <Download size={14} /> Export Audit Trail (CSV)
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, CheckSquare, StickyNote, AlertTriangle, Zap, Scale, MessageSquare, CalendarCheck, Flame } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, CheckSquare, StickyNote, AlertTriangle, Zap, Scale, MessageSquare, CalendarCheck, Flame, ArrowRight } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useDataStore } from '../../store/useDataStore';
@@ -16,8 +17,15 @@ const TYPES: Array<{ type: QuickCaptureType; icon: React.ElementType; label: str
   { type: 'meeting', icon: CalendarCheck, label: 'Meeting', color: 'var(--info)' },
 ];
 
+const TYPE_PATHS: Record<QuickCaptureType, string> = {
+  task: '/tasks', action: '/actions', note: '/notes',
+  risk: '/risks', issue: '/issues', decision: '/decisions',
+  communication: '/communications', meeting: '/meetings',
+};
+
 export default function QuickCapture() {
   const { quickCaptureType, setQuickCaptureOpen } = useUIStore();
+  const navigate = useNavigate();
   const [selectedType, setSelectedType] = useState<QuickCaptureType>(quickCaptureType);
   const [text, setText] = useState('');
   const [owner, setOwner] = useState('');
@@ -126,14 +134,25 @@ export default function QuickCapture() {
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
             Esc to close · ⌘Enter to save
           </span>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleSave}
-            disabled={!text.trim()}
-            style={{ background: saved ? 'var(--success)' : undefined }}
-          >
-            {saved ? '✓ Saved!' : `Save ${currentType.label}`}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {saved && (
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => { navigate(TYPE_PATHS[selectedType]); setQuickCaptureOpen(false); }}
+                style={{ color: 'var(--accent)', fontSize: 12 }}
+              >
+                View <ArrowRight size={12} />
+              </button>
+            )}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleSave}
+              disabled={!text.trim()}
+              style={{ background: saved ? 'var(--success)' : undefined }}
+            >
+              {saved ? '✓ Saved!' : `Save ${currentType.label}`}
+            </button>
+          </div>
         </div>
       </div>
     </div>

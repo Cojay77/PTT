@@ -3029,3 +3029,66 @@ input, textarea, select {
   from { opacity: 0; transform: translate(-50%, -10px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* ============================================================
+   Print Stylesheet — Clean PDF & Printer Output (Q-14 / F-02)
+   ============================================================ */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 11pt !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .quick-capture-backdrop,
+  .sync-notification-bar,
+  .btn,
+  .btn-icon,
+  .tabs,
+  .tab-bar,
+  .filters-bar,
+  .modal-backdrop {
+    display: none !important;
+  }
+
+  .main-content,
+  .page-container,
+  #root,
+  .layout-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .card,
+  .table-container {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #d1d5db !important;
+    background: #ffffff !important;
+    margin-bottom: 16px !important;
+  }
+
+  .page-title {
+    font-size: 20pt !important;
+    color: #111827 !important;
+  }
+
+  .page-subtitle {
+    color: #4b5563 !important;
+    font-size: 10pt !important;
+  }
+
+  .table th,
+  .table td {
+    border-color: #e5e7eb !important;
+    color: #111827 !important;
+  }
+}
+

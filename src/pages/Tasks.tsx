@@ -10,6 +10,8 @@ const PRIORITIES: Priority[] = ['critical', 'high', 'medium', 'low', 'none'];
 
 function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => void }) {
   const milestones = useDataStore(s => s.milestones);
+  const stakeholders = useDataStore(s => s.stakeholders);
+  const resources = useDataStore(s => s.resources);
   const { createTask, updateTask } = useTaskStore();
   const isEdit = Boolean(task?.id);
   const [form, setForm] = useState<Partial<Task>>({
@@ -17,9 +19,18 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
     estimatedWorkload: 0, remainingWorkload: 0, actualWorkload: 0, category: '', tags: '',
     phase: '', description: '', notes: '', blockingReason: '', ...task,
   });
+  const [titleError, setTitleError] = useState(false);
+
+  const knownOwners = useMemo(() => {
+    const set = new Set<string>();
+    resources.forEach(r => { if (r.name) set.add(r.name); });
+    stakeholders.forEach(s => { if (s.name) set.add(s.name); });
+    return Array.from(set).sort();
+  }, [resources, stakeholders]);
 
   function save() {
-    if (!form.title?.trim()) return;
+    if (!form.title?.trim()) { setTitleError(true); return; }
+    setTitleError(false);
     if (isEdit) updateTask(task!.id!, form);
     else createTask(form);
     onClose();
@@ -35,10 +46,21 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
         <button className="btn btn-primary" onClick={save}>Save Task</button>
       </>}
     >
+      <datalist id="task-owners-list">
+        {knownOwners.map(name => <option key={name} value={name} />)}
+      </datalist>
       <div className="form-row" style={{ marginBottom: 16 }}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label required">Title</label>
-          <input className="input" placeholder="Task title..." value={form.title || ''} onChange={f('title')} autoFocus />
+          <input
+            className="input"
+            placeholder="Task title..."
+            value={form.title || ''}
+            onChange={e => { setTitleError(false); setForm(p => ({ ...p, title: e.target.value })); }}
+            style={titleError ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 2px var(--danger-bg)' } : undefined}
+            autoFocus
+          />
+          {titleError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4, fontWeight: 500 }}>⚠ Title is required</div>}
         </div>
         <div className="form-group">
           <label className="form-label">Status</label>
@@ -54,11 +76,11 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
         </div>
         <div className="form-group">
           <label className="form-label">Owner</label>
-          <input className="input" value={form.owner || ''} onChange={f('owner')} />
+          <input className="input" list="task-owners-list" placeholder="Assignee name..." value={form.owner || ''} onChange={f('owner')} />
         </div>
         <div className="form-group">
           <label className="form-label">Contributors</label>
-          <input className="input" value={form.contributors || ''} onChange={f('contributors')} />
+          <input className="input" list="task-owners-list" placeholder="Contributors..." value={form.contributors || ''} onChange={f('contributors')} />
         </div>
         <div className="form-group">
           <label className="form-label">Start Date</label>
@@ -118,21 +140,77 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
   );
 }
 
-function KanbanView({ tasks, onEdit, onDelete }: { tasks: Task[]; onEdit: (t: Task) => void; onDelete: (id: string) => void }) {
+function KanbanView({
+  tasks,
+  onEdit,
+  onDelete,
+  onStatusChange,
+}: {
+  tasks: Task[];
+  onEdit: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onStatusChange: (id: string, status: TaskStatus) => void;
+}) {
   const statuses: TaskStatus[] = ['planned', 'ready', 'in-progress', 'blocked', 'waiting', 'done'];
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
+
   return (
     <div className="kanban-board">
       {statuses.map(status => {
         const col = tasks.filter(t => t.status === status);
+        const isOver = dragOverCol === status;
         return (
-          <div key={status} className="kanban-column">
+          <div
+            key={status}
+            className={`kanban-column${isOver ? ' drag-over' : ''}`}
+            style={{
+              transition: 'background-color 0.2s, outline 0.2s',
+              outline: isOver ? '2px dashed var(--accent)' : 'none',
+              backgroundColor: isOver ? 'var(--bg-card-hover, rgba(59, 130, 246, 0.06))' : undefined,
+            }}
+            onDragOver={e => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (dragOverCol !== status) setDragOverCol(status);
+            }}
+            onDragLeave={e => {
+              // Avoid clearing when moving over child elements
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragOverCol(null);
+            }}
+            onDrop={e => {
+              e.preventDefault();
+              setDragOverCol(null);
+              const id = e.dataTransfer.getData('text/plain') || draggedTaskId;
+              if (id) {
+                onStatusChange(id, status);
+              }
+              setDraggedTaskId(null);
+            }}
+          >
             <div className="kanban-column-header">
               <StatusBadge status={status} />
               <span className="kanban-count">{col.length}</span>
             </div>
-            <div className="kanban-cards">
+            <div className="kanban-cards" style={{ minHeight: 120 }}>
               {col.map(t => (
-                <div key={t.id} className="kanban-card" onClick={() => onEdit(t)}>
+                <div
+                  key={t.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={e => {
+                    e.dataTransfer.setData('text/plain', t.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    setDraggedTaskId(t.id);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedTaskId(null);
+                    setDragOverCol(null);
+                  }}
+                  onClick={() => onEdit(t)}
+                  style={{ cursor: 'grab' }}
+                >
                   <div className="kanban-card-title">{t.title}</div>
                   <div className="kanban-card-meta">
                     <PriorityBadge priority={t.priority} />
@@ -152,7 +230,7 @@ function KanbanView({ tasks, onEdit, onDelete }: { tasks: Task[]; onEdit: (t: Ta
                 </div>
               ))}
               {col.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-placeholder)', fontSize: 12 }}>Empty</div>
+                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-placeholder)', fontSize: 12 }}>Drop tasks here</div>
               )}
             </div>
           </div>
@@ -199,6 +277,15 @@ export default function Tasks() {
     blocked: activeTasks.filter(t => t.status === 'blocked').length,
     inProgress: activeTasks.filter(t => t.status === 'in-progress').length,
   };
+
+  const CYCLE_STATUSES: TaskStatus[] = ['planned', 'ready', 'in-progress', 'blocked', 'waiting', 'done'];
+
+  function cycleStatus(t: Task, e: React.MouseEvent) {
+    e.stopPropagation();
+    const idx = CYCLE_STATUSES.indexOf(t.status);
+    const nextStatus = idx >= 0 ? CYCLE_STATUSES[(idx + 1) % CYCLE_STATUSES.length] : 'planned';
+    updateTask(t.id, { status: nextStatus });
+  }
 
   function sort(field: string) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -262,7 +349,12 @@ export default function Tasks() {
 
       {/* Content */}
       {view === 'kanban' ? (
-        <KanbanView tasks={filtered} onEdit={setEditTask} onDelete={setDeleteId} />
+        <KanbanView
+          tasks={filtered}
+          onEdit={setEditTask}
+          onDelete={setDeleteId}
+          onStatusChange={(id, status) => updateTask(id, { status })}
+        />
       ) : (
         <div className="table-container">
           <table className="table">
@@ -291,7 +383,9 @@ export default function Tasks() {
                       )}
                       {t.tags && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{t.tags}</div>}
                     </td>
-                    <td><StatusBadge status={t.status} /></td>
+                    <td onClick={e => cycleStatus(t, e)} title="Click to cycle status" style={{ cursor: 'pointer' }}>
+                      <StatusBadge status={t.status} />
+                    </td>
                     <td><PriorityBadge priority={t.priority} /></td>
                     <td style={{ color: 'var(--text-secondary)' }}>{t.owner || '—'}</td>
                     <td style={{ color: isOverdue ? 'var(--danger)' : 'inherit' }}>

@@ -9,34 +9,74 @@ const COMM_TYPES = ['Email', 'Meeting', 'Phone call', 'Teams', 'Slack', 'Informa
 const STATUSES: CommunicationStatus[] = ['sent', 'received', 'awaiting-response', 'response-received', 'follow-up-needed', 'closed'];
 
 function CommModal({ comm, onClose }: { comm?: Partial<Communication>; onClose: () => void }) {
-  const { createCommunication, updateCommunication } = useDataStore();
+  const { createCommunication, updateCommunication, stakeholders, resources } = useDataStore();
   const isEdit = Boolean(comm?.id);
   const [form, setForm] = useState<Partial<Communication>>({
     subject: '', type: 'Email', sender: '', recipients: '', date: new Date().toISOString().split('T')[0],
     channel: '', summary: '', informationSent: '', informationRequested: '', expectedResponse: '',
     expectedResponseDate: '', status: 'sent', followUpRequired: false, nextFollowUpDate: '', notes: '', ...comm,
   });
+  const [subjectError, setSubjectError] = useState(false);
+
+  const knownContacts = useMemo(() => {
+    const set = new Set<string>();
+    stakeholders.forEach(s => { if (s.name) set.add(s.name); });
+    resources.forEach(r => { if (r.name) set.add(r.name); });
+    return Array.from(set).sort();
+  }, [stakeholders, resources]);
+
+  const senderInRecipients = useMemo(() => {
+    if (!form.sender?.trim() || !form.recipients?.trim()) return false;
+    const s = form.sender.trim().toLowerCase();
+    const recips = form.recipients.split(',').map(r => r.trim().toLowerCase());
+    return recips.includes(s);
+  }, [form.sender, form.recipients]);
+
   function save() {
-    if (!form.subject?.trim()) return;
+    if (!form.subject?.trim()) {
+      setSubjectError(true);
+      return;
+    }
+    setSubjectError(false);
     if (isEdit) updateCommunication(comm!.id!, form);
     else createCommunication(form);
     onClose();
   }
+
   const f = (k: keyof Communication) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
+
   return (
     <Modal title={isEdit ? 'Edit Communication' : 'New Communication'} onClose={onClose} size="lg"
       footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}
     >
+      <datalist id="comm-contacts-list">
+        {knownContacts.map(c => <option key={c} value={c} />)}
+      </datalist>
       <div className="form-row">
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label required">Subject</label>
-          <input className="input" value={form.subject || ''} onChange={f('subject')} autoFocus />
+          <input
+            className="input"
+            value={form.subject || ''}
+            onChange={e => { setSubjectError(false); setForm(p => ({ ...p, subject: e.target.value })); }}
+            style={subjectError ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 2px var(--danger-bg)' } : undefined}
+            autoFocus
+          />
+          {subjectError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4, fontWeight: 500 }}>⚠ Subject is required</div>}
         </div>
         <div className="form-group"><label className="form-label">Type</label><select className="select" value={form.type} onChange={f('type')}>{COMM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Date</label><input className="input" type="date" value={form.date || ''} onChange={f('date')} /></div>
-        <div className="form-group"><label className="form-label">Sender</label><input className="input" value={form.sender || ''} onChange={f('sender')} /></div>
-        <div className="form-group"><label className="form-label">Recipients</label><input className="input" value={form.recipients || ''} onChange={f('recipients')} placeholder="Name, Name, ..." /></div>
+        <div className="form-group"><label className="form-label">Sender</label><input className="input" list="comm-contacts-list" value={form.sender || ''} onChange={f('sender')} /></div>
+        <div className="form-group">
+          <label className="form-label">Recipients</label>
+          <input className="input" list="comm-contacts-list" value={form.recipients || ''} onChange={f('recipients')} placeholder="Name, Name, ..." />
+          {senderInRecipients && (
+            <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 4 }}>
+              ⚠ Note: Sender "{form.sender}" is also listed as a recipient.
+            </div>
+          )}
+        </div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{STATUSES.map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Channel</label><input className="input" value={form.channel || ''} onChange={f('channel')} placeholder="Email, Teams, ..." /></div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Summary</label><textarea className="textarea" rows={2} value={form.summary || ''} onChange={f('summary')} /></div>

@@ -29,6 +29,7 @@ import {
   X,
   Layers,
   Sparkles,
+  Printer,
 } from 'lucide-react';
 
 function getWeekPeriod(year: number, week: number): { start: string; end: string } {
@@ -626,6 +627,13 @@ ${formData.blockersNotes || '*(None reported)*'}
                       {copied ? 'Copied!' : 'Copy Markdown'}
                     </button>
                     <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => window.print()}
+                      title="Print or save weekly review report as PDF"
+                    >
+                      <Printer size={13} /> Print / PDF
+                    </button>
+                    <button
                       className={`btn btn-sm ${formData.status === 'completed' ? 'btn-ghost' : 'btn-success'}`}
                       onClick={handleToggleStatus}
                     >
@@ -1019,10 +1027,15 @@ ${formData.blockersNotes || '*(None reported)*'}
                 <div className="card">
                   <div className="card-header flex items-center justify-between">
                     <span className="section-title">📄 Formatted Markdown Report (Ready for Email / Slack / Confluence)</span>
-                    <button className="btn btn-primary btn-sm" onClick={handleCopyReport}>
-                      {copied ? <Check size={14} /> : <Copy size={14} />}
-                      {copied ? 'Copied to Clipboard!' : 'Copy to Clipboard'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Print or save weekly review report as PDF">
+                        <Printer size={14} /> Print / PDF
+                      </button>
+                      <button className="btn btn-primary btn-sm" onClick={handleCopyReport}>
+                        {copied ? <Check size={14} /> : <Copy size={14} />}
+                        {copied ? 'Copied to Clipboard!' : 'Copy to Clipboard'}
+                      </button>
+                    </div>
                   </div>
                   <div style={{ padding: '16px' }}>
                     <pre className="weekly-markdown-preview">{reportMarkdown}</pre>

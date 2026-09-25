@@ -722,32 +722,68 @@ export function globalSearch(term: string): Array<{ type: string; id: string; ti
   const like = `%${term}%`;
   const results: Array<{ type: string; id: string; title: string; subtitle: string }> = [];
 
-  const tasks = query<Record<string, unknown>>(`SELECT id, title, status FROM tasks WHERE title LIKE ? OR description LIKE ? LIMIT 5`, [like, like]);
-  tasks.forEach(t => results.push({ type: 'task', id: t.id as string, title: t.title as string, subtitle: t.status as string }));
+  // Tasks: title, description, owner, tags, phase, category
+  const tasks = query<Record<string, unknown>>(
+    `SELECT id, title, status, owner FROM tasks WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR tags LIKE ? OR phase LIKE ? OR category LIKE ? LIMIT 8`,
+    [like, like, like, like, like, like]
+  );
+  tasks.forEach(t => results.push({ type: 'task', id: t.id as string, title: t.title as string, subtitle: `${t.status} · ${(t.owner as string) || 'Unassigned'}` }));
 
-  const risks = query<Record<string, unknown>>(`SELECT id, title, status FROM risks WHERE title LIKE ? OR description LIKE ? LIMIT 5`, [like, like]);
-  risks.forEach(r => results.push({ type: 'risk', id: r.id as string, title: r.title as string, subtitle: r.status as string }));
+  // Risks: title, description, owner, category
+  const risks = query<Record<string, unknown>>(
+    `SELECT id, title, status, owner FROM risks WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ? LIMIT 5`,
+    [like, like, like, like]
+  );
+  risks.forEach(r => results.push({ type: 'risk', id: r.id as string, title: r.title as string, subtitle: `${r.status} · ${(r.owner as string) || ''}` }));
 
-  const issues = query<Record<string, unknown>>(`SELECT id, title, status FROM issues WHERE title LIKE ? OR description LIKE ? LIMIT 5`, [like, like]);
-  issues.forEach(i => results.push({ type: 'issue', id: i.id as string, title: i.title as string, subtitle: i.status as string }));
+  // Issues: title, description, owner, category
+  const issues = query<Record<string, unknown>>(
+    `SELECT id, title, status, owner FROM issues WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ? LIMIT 5`,
+    [like, like, like, like]
+  );
+  issues.forEach(i => results.push({ type: 'issue', id: i.id as string, title: i.title as string, subtitle: `${i.status} · ${(i.owner as string) || ''}` }));
 
-  const decisions = query<Record<string, unknown>>(`SELECT id, title, status FROM decisions WHERE title LIKE ? OR context LIKE ? LIMIT 5`, [like, like]);
-  decisions.forEach(d => results.push({ type: 'decision', id: d.id as string, title: d.title as string, subtitle: d.status as string }));
+  // Decisions: title, context, owner
+  const decisions = query<Record<string, unknown>>(
+    `SELECT id, title, status, owner FROM decisions WHERE title LIKE ? OR context LIKE ? OR owner LIKE ? LIMIT 5`,
+    [like, like, like]
+  );
+  decisions.forEach(d => results.push({ type: 'decision', id: d.id as string, title: d.title as string, subtitle: `${d.status} · ${(d.owner as string) || ''}` }));
 
-  const comms = query<Record<string, unknown>>(`SELECT id, subject, status FROM communications WHERE subject LIKE ? OR summary LIKE ? LIMIT 5`, [like, like]);
-  comms.forEach(c => results.push({ type: 'communication', id: c.id as string, title: c.subject as string, subtitle: c.status as string }));
+  // Communications: subject, summary, recipients, sender
+  const comms = query<Record<string, unknown>>(
+    `SELECT id, subject, status, recipients FROM communications WHERE subject LIKE ? OR summary LIKE ? OR recipients LIKE ? OR sender LIKE ? LIMIT 5`,
+    [like, like, like, like]
+  );
+  comms.forEach(c => results.push({ type: 'communication', id: c.id as string, title: c.subject as string, subtitle: `${c.status} · ${(c.recipients as string) || ''}` }));
 
-  const milestones = query<Record<string, unknown>>(`SELECT id, name, status FROM milestones WHERE name LIKE ? LIMIT 5`, [like]);
-  milestones.forEach(m => results.push({ type: 'milestone', id: m.id as string, title: m.name as string, subtitle: m.status as string }));
+  // Milestones: name, description, owner
+  const milestones = query<Record<string, unknown>>(
+    `SELECT id, name, status, owner FROM milestones WHERE name LIKE ? OR description LIKE ? OR owner LIKE ? LIMIT 5`,
+    [like, like, like]
+  );
+  milestones.forEach(m => results.push({ type: 'milestone', id: m.id as string, title: m.name as string, subtitle: `${m.status} · ${(m.owner as string) || ''}` }));
 
-  const notes = query<Record<string, unknown>>(`SELECT id, title, category FROM notes WHERE title LIKE ? OR content LIKE ? LIMIT 5`, [like, like]);
+  // Notes: title, content, tags, category
+  const notes = query<Record<string, unknown>>(
+    `SELECT id, title, category FROM notes WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? LIMIT 5`,
+    [like, like, like]
+  );
   notes.forEach(n => results.push({ type: 'note', id: n.id as string, title: n.title as string, subtitle: n.category as string }));
 
-  const stakeholders = query<Record<string, unknown>>(`SELECT id, name, role FROM stakeholders WHERE name LIKE ? OR role LIKE ? OR email LIKE ? LIMIT 5`, [like, like, like]);
-  stakeholders.forEach(s => results.push({ type: 'stakeholder', id: s.id as string, title: s.name as string, subtitle: s.role as string }));
+  // Stakeholders: name, role, email, organization
+  const stakeholders = query<Record<string, unknown>>(
+    `SELECT id, name, role, organization FROM stakeholders WHERE name LIKE ? OR role LIKE ? OR email LIKE ? OR organization LIKE ? LIMIT 5`,
+    [like, like, like, like]
+  );
+  stakeholders.forEach(s => results.push({ type: 'stakeholder', id: s.id as string, title: s.name as string, subtitle: `${(s.role as string) || ''} · ${(s.organization as string) || ''}` }));
 
-  const meetings = query<Record<string, unknown>>(`SELECT id, title, date FROM meetings WHERE title LIKE ? LIMIT 5`, [like]);
-  meetings.forEach(m => results.push({ type: 'meeting', id: m.id as string, title: m.title as string, subtitle: m.date as string }));
+  // Meetings: title, participants, agenda
+  const meetings = query<Record<string, unknown>>(
+    `SELECT id, title, date, participants FROM meetings WHERE title LIKE ? OR participants LIKE ? OR agenda LIKE ? LIMIT 5`,
+    [like, like, like]
+  );
+  meetings.forEach(m => results.push({ type: 'meeting', id: m.id as string, title: m.title as string, subtitle: `${(m.date as string) || ''} · ${(m.participants as string) || ''}` }));
 
   return results;
 }

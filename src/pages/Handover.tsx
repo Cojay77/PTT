@@ -3,7 +3,7 @@ import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { projectConfigQueries } from '../db/queries';
 import { ProgressBar, SeverityBadge, StatusBadge, MilestoneBadge } from '../components/ui/shared';
-import { Copy } from 'lucide-react';
+import { Copy, Printer } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Handover() {
@@ -105,7 +105,10 @@ ${pinnedNotes.map(n => `### ${n.title}\n${n.content}`).join('\n\n') || '(no pinn
     <div>
       <div className="flex items-center gap-3 mb-6">
         <div><h1 className="page-title">Handover View</h1><p className="page-subtitle">Project state snapshot for handover or replacement briefing · {today}</p></div>
-        <button className="btn btn-primary ml-auto" onClick={copy}><Copy size={14} /> {copied ? '✓ Copied!' : 'Copy Handover Doc'}</button>
+        <div className="ml-auto flex items-center gap-2">
+          <button className="btn btn-secondary" onClick={() => window.print()} title="Print or save document as PDF"><Printer size={14} /> Print / Save as PDF</button>
+          <button className="btn btn-primary" onClick={copy}><Copy size={14} /> {copied ? '✓ Copied!' : 'Copy Handover Doc'}</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

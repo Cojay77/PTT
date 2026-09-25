@@ -91,6 +91,9 @@ export default function Budget() {
   const totalVariance = totalForecast - totalPlanned;
   const pctSpent = totalPlanned > 0 ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) : 0;
   const overBudgetItems = budgetItems.filter(b => b.forecastAmount > b.plannedAmount && b.status !== 'cancelled').length;
+  const isBudgetBreached = totalPlanned > 0 && totalForecast > totalPlanned;
+  const budgetBreachPct = totalPlanned > 0 ? (((totalForecast - totalPlanned) / totalPlanned) * 100).toFixed(1) : '0';
+
 
   // Category chart data
   const categoryData = useMemo(() => {
@@ -172,6 +175,18 @@ export default function Budget() {
           <span>
             <strong>Mixed currencies detected</strong> — {uniqueCurrencies.join(', ')}.
             KPI totals show <strong>{currency}</strong> items only. Set a single currency per project for accurate consolidated totals.
+          </span>
+        </div>
+      )}
+
+      {/* Budget ceiling breach banner */}
+      {isBudgetBreached && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 16, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--danger)' }}>
+          <TrendingUp size={15} />
+          <span>
+            <strong>Budget ceiling breached</strong> — forecast at completion exceeds planned budget by{' '}
+            <strong>{fmt(totalForecast - totalPlanned, currency)}</strong> (+{budgetBreachPct}%).
+            Review over-forecast lines and update mitigation actions.
           </span>
         </div>
       )}
