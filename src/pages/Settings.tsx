@@ -18,7 +18,7 @@ export default function Settings() {
   function handleImport() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.db,application/x-sqlite3';
+    input.accept = '.ptt,.db,application/x-sqlite3';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;

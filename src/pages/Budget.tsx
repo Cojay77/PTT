@@ -63,8 +63,6 @@ export default function Budget() {
   const [form, setForm] = useState<Partial<BudgetItem>>(emptyForm());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const currency = 'EUR';
-
   const filtered = useMemo(() => {
     let items = [...budgetItems];
     if (filterType !== 'all') items = items.filter(b => b.type === filterType);
@@ -72,10 +70,24 @@ export default function Budget() {
     return items;
   }, [budgetItems, filterType, filterStatus]);
 
-  // KPIs
-  const totalPlanned = budgetItems.reduce((s, b) => s + b.plannedAmount, 0);
-  const totalActual = budgetItems.reduce((s, b) => s + b.actualAmount, 0);
-  const totalForecast = budgetItems.reduce((s, b) => s + b.forecastAmount, 0);
+  // Derive display currency: use the most-common currency across items (default EUR)
+  const currency = useMemo(() => {
+    if (budgetItems.length === 0) return 'EUR';
+    const counts: Record<string, number> = {};
+    budgetItems.forEach(b => { counts[b.currency] = (counts[b.currency] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  }, [budgetItems]);
+
+  // Detect mixed currencies
+  const uniqueCurrencies = useMemo(() => {
+    return [...new Set(budgetItems.map(b => b.currency))];
+  }, [budgetItems]);
+  const hasMixedCurrencies = uniqueCurrencies.length > 1;
+
+  // KPIs — totals are summed numerically; mixed-currency projects should be aware
+  const totalPlanned = budgetItems.filter(b => b.currency === currency).reduce((s, b) => s + b.plannedAmount, 0);
+  const totalActual = budgetItems.filter(b => b.currency === currency).reduce((s, b) => s + b.actualAmount, 0);
+  const totalForecast = budgetItems.filter(b => b.currency === currency).reduce((s, b) => s + b.forecastAmount, 0);
   const totalVariance = totalForecast - totalPlanned;
   const pctSpent = totalPlanned > 0 ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) : 0;
   const overBudgetItems = budgetItems.filter(b => b.forecastAmount > b.plannedAmount && b.status !== 'cancelled').length;
@@ -152,6 +164,17 @@ export default function Budget() {
           <PlusCircle size={15} /> Add Budget Line
         </button>
       </div>
+
+      {/* Multi-currency warning banner */}
+      {hasMixedCurrencies && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 16, background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--warning)' }}>
+          <AlertTriangle size={15} />
+          <span>
+            <strong>Mixed currencies detected</strong> — {uniqueCurrencies.join(', ')}.
+            KPI totals show <strong>{currency}</strong> items only. Set a single currency per project for accurate consolidated totals.
+          </span>
+        </div>
+      )}
 
       {/* KPI Summary Cards */}
       <div className="budget-kpi-grid mb-6">

@@ -54,13 +54,12 @@ function computeSnapshot(
 ): WeeklyReviewSnapshot {
   const activeTasks = tasks.filter((t) => !t.isBacklog);
 
-  // Completed tasks: status is done
+  // Completed tasks: status is done AND updated (or due) within the review period
   const completed = activeTasks.filter(
     (t) =>
       t.status === 'done' &&
       ((t.updatedAt && t.updatedAt.slice(0, 10) >= periodStart && t.updatedAt.slice(0, 10) <= periodEnd) ||
-        (t.dueDate && t.dueDate >= periodStart && t.dueDate <= periodEnd) ||
-        !t.updatedAt)
+        (t.dueDate && t.dueDate >= periodStart && t.dueDate <= periodEnd))
   );
 
   const inProgress = activeTasks.filter((t) => t.status === 'in-progress');

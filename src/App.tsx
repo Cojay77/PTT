@@ -44,14 +44,14 @@ export default function App() {
   useEffect(() => {
     initDatabase()
       .then(() => {
-        // Seed demo data if empty
+        // Seed demo data if the project is empty
         if (!hasDemoData()) {
           seedDemoData();
+          seedWeeklyReviewsIfEmpty();
+          seedBudgetIfEmpty();
+          seedChangeRequestsIfEmpty();
+          seedStakeholderAbsencesIfEmpty();
         }
-        seedWeeklyReviewsIfEmpty();
-        seedBudgetIfEmpty();
-        seedChangeRequestsIfEmpty();
-        seedStakeholderAbsencesIfEmpty();
         loadTasks();
         loadAll();
         setDbReady(true);

@@ -12,9 +12,13 @@ export default function Timeline() {
   const { milestones } = useDataStore();
   const { tasks } = useTaskStore();
 
-  const sorted = [...milestones].sort((a, b) => (a.targetDate || '').localeCompare(b.targetDate || ''));
+  // Filter milestones that have a target date (undated ones would produce Invalid Date)
+  const sorted = milestones
+    .filter(m => m.targetDate)
+    .sort((a, b) => a.targetDate.localeCompare(b.targetDate));
+  const undated = milestones.filter(m => !m.targetDate);
 
-  if (sorted.length === 0) {
+  if (milestones.length === 0) {
     return (
       <div>
         <h1 className="page-title mb-6">Project Timeline</h1>
@@ -25,12 +29,23 @@ export default function Timeline() {
     );
   }
 
+  if (sorted.length === 0) {
+    return (
+      <div>
+        <h1 className="page-title mb-6">Project Timeline</h1>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
+          All {milestones.length} milestone{milestones.length > 1 ? 's have' : ' has'} no target date set. Add dates to see the timeline.
+        </div>
+      </div>
+    );
+  }
+
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  // Timeline bounds
-  const firstDate = sorted[0].targetDate || todayStr;
-  const lastDate = sorted[sorted.length - 1].targetDate || todayStr;
+  // Timeline bounds — safe because sorted only contains dated milestones
+  const firstDate = sorted[0].targetDate;
+  const lastDate = sorted[sorted.length - 1].targetDate;
   const startDate = new Date(firstDate);
   startDate.setDate(startDate.getDate() - 30);
   const endDate = new Date(lastDate);
@@ -49,7 +64,10 @@ export default function Timeline() {
     <div>
       <div className="mb-6">
         <h1 className="page-title">Project Timeline</h1>
-        <p className="page-subtitle">{sorted.length} milestones</p>
+        <p className="page-subtitle">
+          {sorted.length} milestone{sorted.length !== 1 ? 's' : ''} on timeline
+          {undated.length > 0 && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>· {undated.length} without date</span>}
+        </p>
       </div>
 
       {/* Gantt-style timeline */}

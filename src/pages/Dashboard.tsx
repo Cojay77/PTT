@@ -128,7 +128,7 @@ const LEVEL_ICONS = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const snap = useProjectSnapshot();
-  const attentionItems = useMemo(() => buildAttentionItems(snap), []);
+  const attentionItems = useMemo(() => buildAttentionItems(snap), [snap]);
 
   const projectName = snap.config?.name || 'New Project';
   const projectStatus = snap.config?.status || 'on-track';

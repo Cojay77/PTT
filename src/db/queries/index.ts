@@ -259,7 +259,10 @@ export const communicationQueries = {
   getAwaitingResponse(): Communication[] { return query<Record<string, unknown>>(`SELECT * FROM communications WHERE status = 'awaiting-response' ORDER BY expected_response_date ASC`).map(rowToComm); },
   getFollowUpNeeded(): Communication[] {
     const today = new Date().toISOString().split('T')[0];
-    return query<Record<string, unknown>>(`SELECT * FROM communications WHERE follow_up_required = 1 AND status NOT IN ('closed','response-received') ORDER BY next_follow_up_date ASC`, []).map(rowToComm);
+    return query<Record<string, unknown>>(
+      `SELECT * FROM communications WHERE follow_up_required = 1 AND next_follow_up_date != '' AND next_follow_up_date <= ? AND status NOT IN ('closed','response-received') ORDER BY next_follow_up_date ASC`,
+      [today]
+    ).map(rowToComm);
   },
   getOverdueResponses(): Communication[] {
     const today = new Date().toISOString().split('T')[0];
