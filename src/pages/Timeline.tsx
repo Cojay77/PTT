@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
-import { ProgressBar, MilestoneBadge } from '../components/ui/shared';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { ProgressBar, MilestoneBadge, StatusBadge } from '../components/ui/shared';
+import { format, parseISO, differenceInDays, subDays } from 'date-fns';
+import { ChevronDown, ChevronRight, CheckSquare, Clock } from 'lucide-react';
 
 const TRACK_COLORS: Record<string, string> = {
   Development: '#4f8ef7', Infrastructure: '#7c6af7', Migration: '#f79a4f',
@@ -11,6 +13,17 @@ const TRACK_COLORS: Record<string, string> = {
 export default function Timeline() {
   const { milestones } = useDataStore();
   const { tasks } = useTaskStore();
+  const [showTaskLanes, setShowTaskLanes] = useState(false);
+  const [expandedMilestones, setExpandedMilestones] = useState<Set<string>>(new Set());
+
+  function toggleMilestone(id: string) {
+    setExpandedMilestones(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Filter milestones that have a target date (undated ones would produce Invalid Date)
   const sorted = milestones
@@ -52,10 +65,18 @@ export default function Timeline() {
   endDate.setDate(endDate.getDate() + 30);
   const totalDays = differenceInDays(endDate, startDate);
 
+  function getPct(dateStr: string): number {
+    try {
+      const d = parseISO(dateStr);
+      const offset = differenceInDays(d, startDate);
+      return Math.max(0, Math.min(100, (offset / totalDays) * 100));
+    } catch {
+      return 0;
+    }
+  }
+
   function getX(dateStr: string): string {
-    const d = parseISO(dateStr);
-    const offset = differenceInDays(d, startDate);
-    return `${Math.max(0, Math.min(100, (offset / totalDays) * 100))}%`;
+    return `${getPct(dateStr)}%`;
   }
 
   const todayX = getX(todayStr);
@@ -72,8 +93,17 @@ export default function Timeline() {
 
       {/* Gantt-style timeline */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-          <div className="section-title">Milestone Timeline</div>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div className="section-title">Milestone & Task Gantt Timeline</div>
+          <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={showTaskLanes}
+              onChange={e => setShowTaskLanes(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span>Show Task Gantt Lanes</span>
+          </label>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -99,64 +129,142 @@ export default function Timeline() {
               const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
               const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), today) : null;
               const isLate = m.targetDate && m.targetDate < todayStr && m.status !== 'completed';
+              const isExpanded = showTaskLanes || expandedMilestones.has(m.id);
+
               return (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 16, minHeight: 44 }}>
-                  {/* Label */}
-                  <div style={{ width: 220, flexShrink: 0, paddingRight: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
-                    <div style={{ marginTop: 2 }}><MilestoneBadge status={isLate ? 'delayed' : m.status} /></div>
-                  </div>
+                <div key={m.id} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>
+                    {/* Label with expand chevron */}
+                    <div
+                      style={{ width: 220, flexShrink: 0, paddingRight: 16, cursor: mTasks.length > 0 ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => mTasks.length > 0 && toggleMilestone(m.id)}
+                    >
+                      {mTasks.length > 0 ? (
+                        isExpanded ? <ChevronDown size={14} color="var(--text-muted)" /> : <ChevronRight size={14} color="var(--text-muted)" />
+                      ) : <span style={{ width: 14 }} />}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
+                        <div style={{ marginTop: 2 }}><MilestoneBadge status={isLate ? 'delayed' : m.status} /></div>
+                      </div>
+                    </div>
 
-                  {/* Bar track */}
-                  <div style={{ flex: 1, position: 'relative', height: 36, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
-                    {/* Today line */}
-                    <div style={{ position: 'absolute', left: todayX, top: 0, width: 2, height: '100%', background: 'var(--danger)', opacity: 0.6, zIndex: 2 }} />
+                    {/* Bar track */}
+                    <div style={{ flex: 1, position: 'relative', height: 36, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
+                      {/* Today line */}
+                      <div style={{ position: 'absolute', left: todayX, top: 0, width: 2, height: '100%', background: 'var(--danger)', opacity: 0.6, zIndex: 2 }} />
 
-                    {/* Milestone marker */}
-                    {m.targetDate && (
-                      <div style={{ position: 'absolute', left: getX(m.targetDate), top: '50%', transform: 'translate(-50%, -50%)', zIndex: 3 }}>
+                      {/* Milestone marker */}
+                      {m.targetDate && (
+                        <div style={{ position: 'absolute', left: getX(m.targetDate), top: '50%', transform: 'translate(-50%, -50%)', zIndex: 3 }}>
+                          <div style={{
+                            width: 16, height: 16,
+                            background: m.status === 'completed' ? 'var(--success)' : isLate ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)',
+                            borderRadius: 3, transform: 'rotate(45deg)',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                          }} title={`${m.name}: ${m.targetDate}`} />
+                        </div>
+                      )}
+
+                      {/* Task indicators dots when collapsed */}
+                      {!isExpanded && mTasks.filter(t => t.dueDate).slice(0, 8).map(t => (
+                        <div key={t.id} style={{
+                          position: 'absolute', left: getX(t.dueDate!), top: '50%', transform: 'translate(-50%, -50%)',
+                          width: 6, height: 6, borderRadius: '50%',
+                          background: t.status === 'done' ? 'var(--success)' : t.status === 'blocked' ? 'var(--danger)' : 'var(--accent)',
+                          opacity: 0.8, zIndex: 1,
+                        }} title={`${t.title} (${t.status})`} />
+                      ))}
+
+                      {/* Progress fill from start */}
+                      {m.targetDate && m.progress > 0 && (
                         <div style={{
-                          width: 16, height: 16,
-                          background: m.status === 'completed' ? 'var(--success)' : isLate ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)',
-                          borderRadius: 3, transform: 'rotate(45deg)',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                        }} title={`${m.name}: ${m.targetDate}`} />
-                      </div>
-                    )}
+                          position: 'absolute', left: 0, top: '25%', height: '50%',
+                          width: `calc(${getX(m.targetDate)} * ${m.progress / 100})`,
+                          background: 'var(--accent)', opacity: 0.25, borderRadius: 4,
+                          maxWidth: getX(m.targetDate),
+                        }} />
+                      )}
 
-                    {/* Task indicators */}
-                    {mTasks.filter(t => t.dueDate).slice(0, 5).map(t => (
-                      <div key={t.id} style={{
-                        position: 'absolute', left: getX(t.dueDate!), top: '50%', transform: 'translate(-50%, -50%)',
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: t.status === 'done' ? 'var(--success)' : t.status === 'blocked' ? 'var(--danger)' : 'var(--text-muted)',
-                        opacity: 0.7, zIndex: 1,
-                      }} title={t.title} />
-                    ))}
+                      {/* Date label */}
+                      {m.targetDate && (
+                        <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: isLate ? 'var(--danger)' : 'var(--text-muted)', fontWeight: daysLeft !== null && Math.abs(daysLeft) <= 7 ? 700 : 400 }}>
+                          {format(parseISO(m.targetDate), 'MMM d')}
+                          {daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Progress fill from start */}
-                    {m.targetDate && m.progress > 0 && (
-                      <div style={{
-                        position: 'absolute', left: 0, top: '25%', height: '50%',
-                        width: `calc(${getX(m.targetDate)} * ${m.progress / 100})`,
-                        background: 'var(--accent)', opacity: 0.25, borderRadius: 4,
-                        maxWidth: getX(m.targetDate),
-                      }} />
-                    )}
-
-                    {/* Date label */}
-                    {m.targetDate && (
-                      <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: isLate ? 'var(--danger)' : 'var(--text-muted)', fontWeight: daysLeft !== null && Math.abs(daysLeft) <= 7 ? 700 : 400 }}>
-                        {format(parseISO(m.targetDate), 'MMM d')}
-                        {daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
-                      </div>
-                    )}
+                    {/* Progress */}
+                    <div style={{ width: 60, flexShrink: 0, textAlign: 'right', paddingLeft: 12, fontSize: 12, fontWeight: 700, color: m.progress === 100 ? 'var(--success)' : 'var(--text-muted)' }}>
+                      {m.progress}%
+                    </div>
                   </div>
 
-                  {/* Progress */}
-                  <div style={{ width: 60, flexShrink: 0, textAlign: 'right', paddingLeft: 12, fontSize: 12, fontWeight: 700, color: m.progress === 100 ? 'var(--success)' : 'var(--text-muted)' }}>
-                    {m.progress}%
-                  </div>
+                  {/* Task Gantt Lanes under Milestone */}
+                  {isExpanded && mTasks.length > 0 && (
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {mTasks.map(t => {
+                        const estDays = Math.max(1, Math.round((t.estimatedWorkload || 8) / 8));
+                        const tDueDate = t.dueDate || m.targetDate;
+                        const tStartDate = t.startDate || (tDueDate ? format(subDays(parseISO(tDueDate), estDays), 'yyyy-MM-dd') : null);
+                        const startPct = tStartDate ? getPct(tStartDate) : 0;
+                        const endPct = tDueDate ? getPct(tDueDate) : startPct;
+                        const leftPct = Math.min(startPct, endPct);
+                        const widthPct = Math.max(1.5, Math.abs(endPct - startPct));
+                        const isTaskOverdue = t.dueDate && t.dueDate < todayStr && t.status !== 'done';
+                        const taskColor = t.status === 'done' ? 'var(--success)' : isTaskOverdue ? 'var(--danger)' : t.status === 'blocked' ? 'var(--danger)' : t.status === 'in-progress' ? 'var(--accent)' : 'var(--text-muted)';
+
+                        return (
+                          <div key={t.id} style={{ display: 'flex', alignItems: 'center', minHeight: 24, paddingLeft: 20 }}>
+                            {/* Task title */}
+                            <div style={{ width: 200, flexShrink: 0, paddingRight: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 9, color: taskColor }}>●</span>
+                              <div className="truncate" style={{ fontSize: 11, color: 'var(--text-secondary)' }} title={t.title}>
+                                {t.title}
+                              </div>
+                            </div>
+
+                            {/* Task bar container */}
+                            <div style={{ flex: 1, position: 'relative', height: 18, background: 'var(--bg-elevated)', borderRadius: 3 }}>
+                              {/* Today line marker */}
+                              <div style={{ position: 'absolute', left: todayX, top: 0, width: 2, height: '100%', background: 'var(--danger)', opacity: 0.3, zIndex: 1 }} />
+
+                              {/* Task horizontal Gantt bar */}
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  top: 1,
+                                  height: 16,
+                                  background: `${taskColor}33`,
+                                  border: `1px solid ${taskColor}`,
+                                  borderRadius: 3,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  padding: '0 4px',
+                                  zIndex: 2,
+                                  overflow: 'hidden',
+                                }}
+                                title={`${t.title} (${t.status}) · ${tStartDate || 'Start'} → ${tDueDate || 'Due'} · Assignee: ${t.owner || 'Unassigned'}`}
+                              >
+                                {t.owner && (
+                                  <span style={{ fontSize: 9, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                    {t.owner.split(' ')[0]}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Due date / status indicator */}
+                            <div style={{ width: 60, flexShrink: 0, textAlign: 'right', paddingLeft: 12, fontSize: 10, color: 'var(--text-muted)' }}>
+                              {t.status === 'done' ? '✓' : t.dueDate ? format(parseISO(t.dueDate), 'MMM d') : ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

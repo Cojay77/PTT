@@ -11,7 +11,8 @@ import {
   ActionBadge, DecisionBadge, StatusBadge, PriorityBadge, DateDisplay
 } from '../components/ui/shared';
 import type { Meeting, Action, Task, Decision, ActionStatus, TaskStatus, DecisionStatus, Priority } from '../types';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addWeeks, addMonths } from 'date-fns';
+import { FileText, Repeat } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -26,6 +27,52 @@ const MEETING_TYPES = [
   'Retrospective',
   'Informal',
   'Other',
+];
+
+interface MeetingTemplate {
+  name: string;
+  type: string;
+  titlePrefix: string;
+  agenda: string;
+}
+
+const MEETING_TEMPLATES: MeetingTemplate[] = [
+  {
+    name: 'Steering Committee (COPIL)',
+    type: 'Steering Committee',
+    titlePrefix: 'Steering Committee (COPIL) — ',
+    agenda: `## 1. Project Health & Milestones\n- Overall project status (Schedule, Scope, Budget)\n- Milestone delivery progress vs baseline\n\n## 2. Key Decisions & Strategic Arbitrations\n- Strategic decisions requiring executive sign-off\n- Governance and roadmap trade-offs\n\n## 3. Top Risks & Critical Blockers\n- Critical risks requiring executive awareness or mitigation budget\n- Major cross-team dependencies and roadblocks\n\n## 4. Financial & Budget Update\n- CapEx / OpEx budget consumption and forecasted variance\n\n## 5. Next Steps & Next COPIL Date\n- Approved actions and sign-offs\n- Proposed date for next Steering Committee`,
+  },
+  {
+    name: 'Weekly Operational Committee (COPROJ)',
+    type: 'Operational Committee',
+    titlePrefix: 'COPROJ Weekly — ',
+    agenda: `## 1. Action Items Review\n- Status of actions assigned during previous meeting\n\n## 2. Workstream & Task Progress\n- Key deliverables completed this week\n- Current tasks in progress and upcoming sprint priorities\n\n## 3. Blockers & Technical Dependencies\n- Identified roadblocks and issues requiring escalation\n\n## 4. Upcoming Key Dates\n- Deliverables scheduled for the next 2 weeks`,
+  },
+  {
+    name: 'Sprint / Daily Standup',
+    type: 'Project Meeting',
+    titlePrefix: 'Standup — ',
+    agenda: `## 1. Completed\n- What was accomplished since last check-in?\n\n## 2. Planned for Today / This Week\n- What are the current work items and commitments?\n\n## 3. Blockers & Help Needed\n- Are there any impediments or external dependencies?`,
+  },
+  {
+    name: 'Sprint Retrospective',
+    type: 'Retrospective',
+    titlePrefix: 'Sprint Retrospective — ',
+    agenda: `## 1. What Went Well?\n- Successes, milestones hit, effective team practices\n\n## 2. What Could Be Improved?\n- Pain points, process friction, communication gaps\n\n## 3. What Did We Learn?\n- Insights, technical discoveries, process lessons\n\n## 4. Action Plan for Next Sprint\n- Concrete improvements and responsible owners`,
+  },
+  {
+    name: 'Architecture & Technical Review',
+    type: 'Technical Meeting',
+    titlePrefix: 'Architecture Review — ',
+    agenda: `## 1. Technical Context & Objectives\n- Problem statement and architectural requirements\n\n## 2. Options & Alternatives Evaluated\n- Proposed solution architecture vs viable alternatives\n\n## 3. Security, Performance & Scalability\n- Compliance, infrastructure impact, latency, resilience\n\n## 4. Architectural Decision & Trade-offs\n- Formal decision, rationale, and consequences`,
+  },
+  {
+    name: 'Vendor & Contractual Review',
+    type: 'Vendor Meeting',
+    titlePrefix: 'Vendor Review — ',
+    agenda: `## 1. SLA & Delivery Performance\n- Status of deliverables committed under contract\n\n## 2. Quality & Incident Review\n- Defect turnaround time, open tickets, performance issues\n\n## 3. Change Requests & Financial Impact\n- In-flight change requests and billing milestones\n\n## 4. Next Milestone Deadlines\n- Commitments for upcoming billing cycle`,
+  },
 ];
 
 function parseIdList(str?: string | null): string[] {
@@ -53,6 +100,9 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
   const isEdit = Boolean(meeting?.id);
   const [activeTab, setActiveTab] = useState<'details' | 'links'>('details');
   const [previewMarkdown, setPreviewMarkdown] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
+  const [recurringCount, setRecurringCount] = useState(4);
 
   const [form, setForm] = useState<Partial<Meeting>>({
     title: '',
@@ -230,8 +280,30 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
     if (isEdit && meetingId) {
       updateMeeting(meetingId, payload);
     } else {
-      const created = createMeeting(payload);
-      meetingId = created.id;
+      if (isRecurring && recurringCount > 1) {
+        const baseDate = parseISO(form.date || new Date().toISOString().split('T')[0]);
+        for (let i = 0; i < recurringCount; i++) {
+          let dateObj: Date;
+          if (recurringFrequency === 'weekly') {
+            dateObj = addWeeks(baseDate, i);
+          } else if (recurringFrequency === 'biweekly') {
+            dateObj = addWeeks(baseDate, i * 2);
+          } else {
+            dateObj = addMonths(baseDate, i);
+          }
+          const occDate = format(dateObj, 'yyyy-MM-dd');
+          const occTitle = `${form.title} (${i + 1}/${recurringCount})`;
+          const created = createMeeting({
+            ...payload,
+            title: occTitle,
+            date: occDate,
+          });
+          if (i === 0) meetingId = created.id;
+        }
+      } else {
+        const created = createMeeting(payload);
+        meetingId = created.id;
+      }
     }
 
     // Bidirectional sync: set relatedMeetingId on linked actions
@@ -269,7 +341,7 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={save}>
-            {isEdit ? 'Save Changes' : 'Create Meeting'}
+            {isEdit ? 'Save Changes' : isRecurring && recurringCount > 1 ? `Create ${recurringCount} Meetings` : 'Create Meeting'}
           </button>
         </>
       }
@@ -302,6 +374,47 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
 
       {activeTab === 'details' && (
         <div>
+          {/* Quick Template Picker (only for new meetings or whenever user wants to load a template) */}
+          {!isEdit && (
+            <div style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 14px',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
+                <FileText size={15} color="var(--accent)" />
+                <span>Load Template:</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {MEETING_TEMPLATES.map(tpl => (
+                  <button
+                    key={tpl.name}
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    style={{ fontSize: 11, border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+                    onClick={() => {
+                      setForm(prev => ({
+                        ...prev,
+                        title: prev.title ? prev.title : tpl.titlePrefix,
+                        type: tpl.type,
+                        agenda: tpl.agenda,
+                      }));
+                    }}
+                  >
+                    {tpl.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="form-label required">Title</label>
@@ -337,6 +450,59 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
               />
             </div>
           </div>
+
+          {/* Recurring series option (only for new meetings) */}
+          {!isEdit && (
+            <div style={{
+              background: isRecurring ? 'var(--accent-soft)' : 'transparent',
+              border: '1px dashed var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '8px 12px',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={isRecurring}
+                  onChange={e => setIsRecurring(e.target.checked)}
+                />
+                <Repeat size={14} color="var(--accent)" />
+                <span>Schedule as Recurring Series</span>
+              </label>
+
+              {isRecurring && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                  <span>Frequency:</span>
+                  <select
+                    className="select"
+                    style={{ height: 28, fontSize: 12, padding: '2px 8px', width: 'auto' }}
+                    value={recurringFrequency}
+                    onChange={e => setRecurringFrequency(e.target.value as any)}
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Bi-weekly (every 2 weeks)</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  <span>Count:</span>
+                  <input
+                    type="number"
+                    className="input"
+                    style={{ height: 28, fontSize: 12, width: 60, padding: '2px 6px' }}
+                    min={2}
+                    max={24}
+                    value={recurringCount}
+                    onChange={e => setRecurringCount(Math.max(2, Math.min(24, parseInt(e.target.value) || 2)))}
+                  />
+                  <span style={{ color: 'var(--text-muted)' }}>meetings will be created</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="form-group">

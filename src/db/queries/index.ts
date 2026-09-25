@@ -718,72 +718,230 @@ export const settingsQueries = {
 // Global search
 // ============================================================
 export function globalSearch(term: string): Array<{ type: string; id: string; title: string; subtitle: string }> {
-  if (!term || term.length < 2) return [];
-  const like = `%${term}%`;
+  if (!term || term.trim().length < 2) return [];
+
+  const tokens = term.trim().split(/\s+/);
+  let filterType: string | null = null;
+  let filterOwner: string | null = null;
+  let filterStatus: string | null = null;
+  let isOverdue = false;
+  let isBlocked = false;
+  const textWords: string[] = [];
+
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (lower.startsWith('type:')) {
+      filterType = lower.slice(5).trim();
+    } else if (lower.startsWith('owner:')) {
+      filterOwner = token.slice(6).trim();
+    } else if (lower.startsWith('status:')) {
+      filterStatus = lower.slice(7).trim();
+    } else if (lower === 'is:overdue') {
+      isOverdue = true;
+    } else if (lower === 'is:blocked') {
+      isBlocked = true;
+    } else {
+      textWords.push(token);
+    }
+  }
+
+  const queryText = textWords.join(' ');
+  const like = queryText ? `%${queryText}%` : '%';
+  const today = new Date().toISOString().split('T')[0];
   const results: Array<{ type: string; id: string; title: string; subtitle: string }> = [];
 
+  const shouldSearch = (t: string) => !filterType || filterType === t || `${t}s` === filterType;
+
   // Tasks: title, description, owner, tags, phase, category
-  const tasks = query<Record<string, unknown>>(
-    `SELECT id, title, status, owner FROM tasks WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR tags LIKE ? OR phase LIKE ? OR category LIKE ? LIMIT 8`,
-    [like, like, like, like, like, like]
-  );
-  tasks.forEach(t => results.push({ type: 'task', id: t.id as string, title: t.title as string, subtitle: `${t.status} · ${(t.owner as string) || 'Unassigned'}` }));
+  if (shouldSearch('task')) {
+    let sql = `SELECT id, title, status, owner, due_date FROM tasks WHERE (title LIKE ? OR description LIKE ? OR owner LIKE ? OR tags LIKE ? OR phase LIKE ? OR category LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like, like, like, like];
+
+    if (filterOwner) {
+      sql += ` AND owner LIKE ?`;
+      params.push(`%${filterOwner}%`);
+    }
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    if (isOverdue) {
+      sql += ` AND due_date != '' AND due_date < ? AND status NOT IN ('done', 'cancelled')`;
+      params.push(today);
+    }
+    if (isBlocked) {
+      sql += ` AND status = 'blocked'`;
+    }
+    sql += ` LIMIT 15`;
+
+    const tasks = query<Record<string, unknown>>(sql, params);
+    tasks.forEach(t => results.push({
+      type: 'task',
+      id: t.id as string,
+      title: t.title as string,
+      subtitle: `${t.status} · ${(t.owner as string) || 'Unassigned'}${t.due_date ? ` · Due: ${t.due_date}` : ''}`
+    }));
+  }
 
   // Risks: title, description, owner, category
-  const risks = query<Record<string, unknown>>(
-    `SELECT id, title, status, owner FROM risks WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ? LIMIT 5`,
-    [like, like, like, like]
-  );
-  risks.forEach(r => results.push({ type: 'risk', id: r.id as string, title: r.title as string, subtitle: `${r.status} · ${(r.owner as string) || ''}` }));
+  if (shouldSearch('risk') && !isBlocked) {
+    let sql = `SELECT id, title, status, owner, severity FROM risks WHERE (title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like, like];
+    if (filterOwner) {
+      sql += ` AND owner LIKE ?`;
+      params.push(`%${filterOwner}%`);
+    }
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    sql += ` LIMIT 8`;
+
+    const risks = query<Record<string, unknown>>(sql, params);
+    risks.forEach(r => results.push({
+      type: 'risk',
+      id: r.id as string,
+      title: r.title as string,
+      subtitle: `${r.severity || ''} · ${r.status} · ${(r.owner as string) || ''}`
+    }));
+  }
 
   // Issues: title, description, owner, category
-  const issues = query<Record<string, unknown>>(
-    `SELECT id, title, status, owner FROM issues WHERE title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ? LIMIT 5`,
-    [like, like, like, like]
-  );
-  issues.forEach(i => results.push({ type: 'issue', id: i.id as string, title: i.title as string, subtitle: `${i.status} · ${(i.owner as string) || ''}` }));
+  if (shouldSearch('issue')) {
+    let sql = `SELECT id, title, status, owner, severity FROM issues WHERE (title LIKE ? OR description LIKE ? OR owner LIKE ? OR category LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like, like];
+    if (filterOwner) {
+      sql += ` AND owner LIKE ?`;
+      params.push(`%${filterOwner}%`);
+    }
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    sql += ` LIMIT 8`;
+
+    const issues = query<Record<string, unknown>>(sql, params);
+    issues.forEach(i => results.push({
+      type: 'issue',
+      id: i.id as string,
+      title: i.title as string,
+      subtitle: `${i.severity || ''} · ${i.status} · ${(i.owner as string) || ''}`
+    }));
+  }
 
   // Decisions: title, context, owner
-  const decisions = query<Record<string, unknown>>(
-    `SELECT id, title, status, owner FROM decisions WHERE title LIKE ? OR context LIKE ? OR owner LIKE ? LIMIT 5`,
-    [like, like, like]
-  );
-  decisions.forEach(d => results.push({ type: 'decision', id: d.id as string, title: d.title as string, subtitle: `${d.status} · ${(d.owner as string) || ''}` }));
+  if (shouldSearch('decision') && !isBlocked) {
+    let sql = `SELECT id, title, status, owner FROM decisions WHERE (title LIKE ? OR context LIKE ? OR owner LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like];
+    if (filterOwner) {
+      sql += ` AND owner LIKE ?`;
+      params.push(`%${filterOwner}%`);
+    }
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    sql += ` LIMIT 8`;
+
+    const decisions = query<Record<string, unknown>>(sql, params);
+    decisions.forEach(d => results.push({
+      type: 'decision',
+      id: d.id as string,
+      title: d.title as string,
+      subtitle: `${d.status} · ${(d.owner as string) || ''}`
+    }));
+  }
 
   // Communications: subject, summary, recipients, sender
-  const comms = query<Record<string, unknown>>(
-    `SELECT id, subject, status, recipients FROM communications WHERE subject LIKE ? OR summary LIKE ? OR recipients LIKE ? OR sender LIKE ? LIMIT 5`,
-    [like, like, like, like]
-  );
-  comms.forEach(c => results.push({ type: 'communication', id: c.id as string, title: c.subject as string, subtitle: `${c.status} · ${(c.recipients as string) || ''}` }));
+  if (shouldSearch('communication') && !isBlocked) {
+    let sql = `SELECT id, subject, status, recipients, sender, expected_response_date FROM communications WHERE (subject LIKE ? OR summary LIKE ? OR recipients LIKE ? OR sender LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like, like];
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    if (isOverdue) {
+      sql += ` AND expected_response_date != '' AND expected_response_date < ? AND status NOT IN ('closed', 'response-received')`;
+      params.push(today);
+    }
+    sql += ` LIMIT 8`;
+
+    const comms = query<Record<string, unknown>>(sql, params);
+    comms.forEach(c => results.push({
+      type: 'communication',
+      id: c.id as string,
+      title: c.subject as string,
+      subtitle: `${c.status} · ${(c.recipients as string) || ''}`
+    }));
+  }
 
   // Milestones: name, description, owner
-  const milestones = query<Record<string, unknown>>(
-    `SELECT id, name, status, owner FROM milestones WHERE name LIKE ? OR description LIKE ? OR owner LIKE ? LIMIT 5`,
-    [like, like, like]
-  );
-  milestones.forEach(m => results.push({ type: 'milestone', id: m.id as string, title: m.name as string, subtitle: `${m.status} · ${(m.owner as string) || ''}` }));
+  if (shouldSearch('milestone') && !isBlocked) {
+    let sql = `SELECT id, name, status, owner, target_date FROM milestones WHERE (name LIKE ? OR description LIKE ? OR owner LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like];
+    if (filterOwner) {
+      sql += ` AND owner LIKE ?`;
+      params.push(`%${filterOwner}%`);
+    }
+    if (filterStatus) {
+      sql += ` AND status LIKE ?`;
+      params.push(`%${filterStatus}%`);
+    }
+    sql += ` LIMIT 8`;
+
+    const milestones = query<Record<string, unknown>>(sql, params);
+    milestones.forEach(m => results.push({
+      type: 'milestone',
+      id: m.id as string,
+      title: m.name as string,
+      subtitle: `${m.status} · ${(m.owner as string) || ''}${m.target_date ? ` · ${m.target_date}` : ''}`
+    }));
+  }
 
   // Notes: title, content, tags, category
-  const notes = query<Record<string, unknown>>(
-    `SELECT id, title, category FROM notes WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? LIMIT 5`,
-    [like, like, like]
-  );
-  notes.forEach(n => results.push({ type: 'note', id: n.id as string, title: n.title as string, subtitle: n.category as string }));
+  if (shouldSearch('note') && !isBlocked && !isOverdue) {
+    let sql = `SELECT id, title, category FROM notes WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like];
+    sql += ` LIMIT 8`;
+
+    const notes = query<Record<string, unknown>>(sql, params);
+    notes.forEach(n => results.push({
+      type: 'note',
+      id: n.id as string,
+      title: n.title as string,
+      subtitle: (n.category as string) || 'Note'
+    }));
+  }
 
   // Stakeholders: name, role, email, organization
-  const stakeholders = query<Record<string, unknown>>(
-    `SELECT id, name, role, organization FROM stakeholders WHERE name LIKE ? OR role LIKE ? OR email LIKE ? OR organization LIKE ? LIMIT 5`,
-    [like, like, like, like]
-  );
-  stakeholders.forEach(s => results.push({ type: 'stakeholder', id: s.id as string, title: s.name as string, subtitle: `${(s.role as string) || ''} · ${(s.organization as string) || ''}` }));
+  if (shouldSearch('stakeholder') && !isBlocked && !isOverdue) {
+    let sql = `SELECT id, name, role, organization FROM stakeholders WHERE (name LIKE ? OR role LIKE ? OR email LIKE ? OR organization LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like, like];
+    sql += ` LIMIT 8`;
+
+    const stakeholders = query<Record<string, unknown>>(sql, params);
+    stakeholders.forEach(s => results.push({
+      type: 'stakeholder',
+      id: s.id as string,
+      title: s.name as string,
+      subtitle: `${(s.role as string) || ''} · ${(s.organization as string) || ''}`
+    }));
+  }
 
   // Meetings: title, participants, agenda
-  const meetings = query<Record<string, unknown>>(
-    `SELECT id, title, date, participants FROM meetings WHERE title LIKE ? OR participants LIKE ? OR agenda LIKE ? LIMIT 5`,
-    [like, like, like]
-  );
-  meetings.forEach(m => results.push({ type: 'meeting', id: m.id as string, title: m.title as string, subtitle: `${(m.date as string) || ''} · ${(m.participants as string) || ''}` }));
+  if (shouldSearch('meeting') && !isBlocked && !isOverdue) {
+    let sql = `SELECT id, title, date, participants FROM meetings WHERE (title LIKE ? OR participants LIKE ? OR agenda LIKE ?)`;
+    const params: (string | number | null | boolean)[] = [like, like, like];
+    sql += ` LIMIT 8`;
+
+    const meetings = query<Record<string, unknown>>(sql, params);
+    meetings.forEach(m => results.push({
+      type: 'meeting',
+      id: m.id as string,
+      title: m.title as string,
+      subtitle: `${(m.date as string) || ''} · ${(m.participants as string) || ''}`
+    }));
+  }
 
   return results;
 }

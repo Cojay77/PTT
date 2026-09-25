@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
-import { Plus, Filter, Search, Trash2, Edit3, ChevronUp, ChevronDown } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { Plus, Filter, Search, Trash2, Edit3, ChevronUp, ChevronDown, Upload, Download, FileText, Check } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
 import { StatusBadge, PriorityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, ProgressBar } from '../components/ui/shared';
 import type { Task, TaskStatus, Priority } from '../types';
+import { exportTasksToCsv, downloadTaskTemplateCsv, parseCsv } from '../utils/export';
 
 const STATUSES: TaskStatus[] = ['backlog', 'planned', 'ready', 'in-progress', 'blocked', 'waiting', 'done', 'cancelled'];
 const PRIORITIES: Priority[] = ['critical', 'high', 'medium', 'low', 'none'];
@@ -254,6 +255,12 @@ export default function Tasks() {
   const [sortField, setSortField] = useState('dueDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvPreviewTasks, setCsvPreviewTasks] = useState<Array<Partial<Task>> | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+
   const activeTasks = tasks.filter(t => !t.isBacklog);
 
   const filtered = useMemo(() => {
@@ -297,6 +304,78 @@ export default function Tasks() {
     return sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
   }
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const { headers, rows } = parseCsv(content);
+        if (rows.length === 0) {
+          setCsvError('No data rows found in CSV file.');
+          return;
+        }
+        const headerMap: Record<string, number> = {};
+        headers.forEach((h, idx) => {
+          const norm = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+          headerMap[norm] = idx;
+        });
+
+        const getCol = (row: string[], ...keys: string[]): string => {
+          for (const k of keys) {
+            const idx = headerMap[k.toLowerCase().replace(/[^a-z0-9]/g, '')];
+            if (idx !== undefined && row[idx] !== undefined) {
+              return row[idx].trim();
+            }
+          }
+          return '';
+        };
+
+        const parsed: Array<Partial<Task>> = [];
+        for (const row of rows) {
+          const title = getCol(row, 'title', 'task', 'summary', 'name');
+          if (!title) continue;
+          const statusRaw = getCol(row, 'status').toLowerCase().replace(/\s+/g, '-');
+          const status: TaskStatus = STATUSES.includes(statusRaw as TaskStatus) ? (statusRaw as TaskStatus) : 'planned';
+          const priorityRaw = getCol(row, 'priority').toLowerCase();
+          const priority: Priority = PRIORITIES.includes(priorityRaw as Priority) ? (priorityRaw as Priority) : 'medium';
+          const owner = getCol(row, 'owner', 'assignee');
+          const dueDate = getCol(row, 'duedate', 'due');
+          const estWorkload = Number(getCol(row, 'estimatedworkload', 'estimated', 'estimate', 'workload')) || 0;
+          const phase = getCol(row, 'phase');
+          const category = getCol(row, 'category');
+          const description = getCol(row, 'description', 'notes');
+
+          parsed.push({
+            title,
+            status,
+            priority,
+            owner,
+            dueDate,
+            estimatedWorkload: estWorkload,
+            remainingWorkload: estWorkload,
+            phase,
+            category,
+            description,
+          });
+        }
+
+        if (parsed.length === 0) {
+          setCsvError('Could not find any tasks with a valid Title column.');
+          return;
+        }
+
+        setCsvPreviewTasks(parsed);
+        setCsvError(null);
+      } catch (err: any) {
+        setCsvError(err.message || 'Failed to parse CSV file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
   return (
     <div>
       {/* Header */}
@@ -305,7 +384,20 @@ export default function Tasks() {
           <h1 className="page-title">Tasks</h1>
           <p className="page-subtitle">{stats.total} tasks · {stats.done} done · {stats.overdue} overdue · {stats.blocked} blocked</p>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleFileUpload}
+          />
+          <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Import tasks from CSV">
+            <Upload size={13} /> Import CSV
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportTasksToCsv(activeTasks)} title="Export tasks to CSV">
+            <Download size={13} /> Export CSV
+          </button>
           <div className="tabs" style={{ border: 'none', gap: 0 }}>
             <button className={`tab${view === 'table' ? ' active' : ''}`} onClick={() => setView('table')}>Table</button>
             <button className={`tab${view === 'kanban' ? ' active' : ''}`} onClick={() => setView('kanban')}>Kanban</button>
@@ -321,6 +413,81 @@ export default function Tasks() {
         <div className="alert-banner alert-critical mb-4" style={{ marginBottom: 16 }}>
           <span>🔴 {stats.overdue} overdue task{stats.overdue > 1 ? 's' : ''}</span>
           {stats.blocked > 0 && <span style={{ marginLeft: 16 }}>🚫 {stats.blocked} blocked</span>}
+        </div>
+      )}
+
+      {/* CSV Error Banner */}
+      {csvError && (
+        <div className="alert-banner alert-critical mb-4" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠ {csvError}</span>
+          <button className="btn btn-ghost btn-xs" onClick={() => setCsvError(null)}>Dismiss</button>
+        </div>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--accent)',
+          borderRadius: 'var(--radius-md)',
+          padding: '8px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+          boxShadow: 'var(--shadow-md)',
+        }}>
+          <div className="flex items-center gap-2">
+            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--accent)' }}>
+              {selectedIds.size} task{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <button className="btn btn-ghost btn-xs" onClick={() => setSelectedIds(new Set())}>
+              Deselect all
+            </button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status:</span>
+            <select
+              className="select"
+              style={{ height: 28, fontSize: 12, padding: '2px 8px', width: 'auto' }}
+              defaultValue=""
+              onChange={e => {
+                if (!e.target.value) return;
+                const newStatus = e.target.value as TaskStatus;
+                selectedIds.forEach(id => updateTask(id, { status: newStatus }));
+                e.target.value = '';
+              }}
+            >
+              <option value="" disabled>Change status...</option>
+              {STATUSES.map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}
+            </select>
+
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Priority:</span>
+            <select
+              className="select"
+              style={{ height: 28, fontSize: 12, padding: '2px 8px', width: 'auto' }}
+              defaultValue=""
+              onChange={e => {
+                if (!e.target.value) return;
+                const newPriority = e.target.value as Priority;
+                selectedIds.forEach(id => updateTask(id, { priority: newPriority }));
+                e.target.value = '';
+              }}
+            >
+              <option value="" disabled>Change priority...</option>
+              {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--danger)', height: 28, padding: '2px 8px', fontSize: 12 }}
+              onClick={() => setBulkDeleteConfirm(true)}
+            >
+              <Trash2 size={13} /> Delete selected ({selectedIds.size})
+            </button>
+          </div>
         </div>
       )}
 
@@ -360,6 +527,17 @@ export default function Tasks() {
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 36, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedIds(new Set(filtered.map(t => t.id)));
+                      else setSelectedIds(new Set());
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th onClick={() => sort('title')} className={sortField === 'title' ? 'sorted' : ''}>Title <SortIcon field="title" /></th>
                 <th onClick={() => sort('status')} className={sortField === 'status' ? 'sorted' : ''}>Status <SortIcon field="status" /></th>
                 <th onClick={() => sort('priority')} className={sortField === 'priority' ? 'sorted' : ''}>Priority <SortIcon field="priority" /></th>
@@ -376,6 +554,21 @@ export default function Tasks() {
                 const milestone = milestones.find(m => m.id === t.milestoneId);
                 return (
                   <tr key={t.id} style={{ opacity: t.status === 'cancelled' ? 0.5 : 1 }} onClick={() => setEditTask(t)}>
+                    <td style={{ width: 36, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(t.id)}
+                        onChange={e => {
+                          setSelectedIds(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(t.id);
+                            else next.delete(t.id);
+                            return next;
+                          });
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
                     <td style={{ maxWidth: 300 }}>
                       <div style={{ fontWeight: 500 }} className="truncate">{t.title}</div>
                       {t.status === 'blocked' && t.blockingReason && (
@@ -412,7 +605,7 @@ export default function Tasks() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={8}><EmptyState icon={Filter} title="No tasks found" desc="Try adjusting filters or create a new task." /></td></tr>
+                <tr><td colSpan={9}><EmptyState icon={Filter} title="No tasks found" desc="Try adjusting filters or create a new task." /></td></tr>
               )}
             </tbody>
           </table>
@@ -425,6 +618,84 @@ export default function Tasks() {
           message="Delete this task permanently?"
           onConfirm={() => { deleteTask(deleteId); setDeleteId(null); }}
           onCancel={() => setDeleteId(null)}
+        />
+      )}
+
+      {/* CSV Preview Modal */}
+      {csvPreviewTasks !== null && (
+        <Modal
+          title="Import Tasks from CSV"
+          onClose={() => setCsvPreviewTasks(null)}
+          size="lg"
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => downloadTaskTemplateCsv()}>
+                <Download size={13} /> Download Template
+              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={() => setCsvPreviewTasks(null)}>Cancel</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    csvPreviewTasks.forEach(t => createTask(t));
+                    setCsvPreviewTasks(null);
+                  }}
+                >
+                  Import {csvPreviewTasks.length} Task{csvPreviewTasks.length > 1 ? 's' : ''}
+                </button>
+              </div>
+            </>
+          }
+        >
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              Found <strong>{csvPreviewTasks.length}</strong> tasks in the CSV file. Here is a preview of the items to be imported:
+            </p>
+          </div>
+          <div className="table-container" style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <table className="table" style={{ fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Owner</th>
+                  <th>Due Date</th>
+                  <th>Est. Workload</th>
+                </tr>
+              </thead>
+              <tbody>
+                {csvPreviewTasks.slice(0, 10).map((t, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: 500 }}>{t.title}</td>
+                    <td><StatusBadge status={t.status || 'planned'} /></td>
+                    <td><PriorityBadge priority={t.priority || 'medium'} /></td>
+                    <td style={{ color: 'var(--text-secondary)' }}>{t.owner || '—'}</td>
+                    <td>{t.dueDate || '—'}</td>
+                    <td>{t.estimatedWorkload ? `${t.estimatedWorkload}h` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {csvPreviewTasks.length > 10 && (
+            <div style={{ textAlign: 'center', marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+              ...and {csvPreviewTasks.length - 10} more tasks
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Bulk Delete Confirm Dialog */}
+      {bulkDeleteConfirm && (
+        <ConfirmDialog
+          message={`Are you sure you want to delete ${selectedIds.size} selected tasks permanently?`}
+          onConfirm={() => {
+            selectedIds.forEach(id => deleteTask(id));
+            setSelectedIds(new Set());
+            setBulkDeleteConfirm(false);
+          }}
+          onCancel={() => setBulkDeleteConfirm(false)}
         />
       )}
     </div>

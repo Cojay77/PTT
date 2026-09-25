@@ -38,6 +38,69 @@ export function exportTasksToCsv(tasks: Task[]): void {
   exportToCsv(`tasks-export-${dateStr}.csv`, headers, rows);
 }
 
+export function downloadTaskTemplateCsv(): void {
+  const headers = ['Title', 'Status', 'Priority', 'Owner', 'Due Date', 'Estimated (h)', 'Phase', 'Category', 'Description'];
+  const sampleRows = [
+    ['Setup CI/CD deployment pipeline', 'planned', 'high', 'Thomas Laurent', '2026-10-15', '16', 'Build', 'DevOps', 'Configure automated pipelines and checks'],
+    ['Security vulnerability audit', 'in-progress', 'critical', 'Sophie Chen', '2026-10-20', '24', 'Security', 'Audit', 'Review third-party packages and API tokens'],
+  ];
+  exportToCsv('ptt-task-template.csv', headers, sampleRows);
+}
+
+export function parseCsv(csvText: string): { headers: string[]; rows: string[][] } {
+  const text = csvText.replace(/^\uFEFF/, '');
+  let currentField = '';
+  let inQuotes = false;
+  let currentLine: string[] = [];
+  const result: string[][] = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentLine.push(currentField.trim());
+        currentField = '';
+      } else if (char === '\r') {
+        // ignore
+      } else if (char === '\n') {
+        currentLine.push(currentField.trim());
+        if (currentLine.some(c => c.length > 0)) {
+          result.push(currentLine);
+        }
+        currentLine = [];
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+  }
+
+  if (currentField.length > 0 || currentLine.length > 0) {
+    currentLine.push(currentField.trim());
+    if (currentLine.some(c => c.length > 0)) {
+      result.push(currentLine);
+    }
+  }
+
+  if (result.length === 0) return { headers: [], rows: [] };
+  const headers = result[0];
+  const rows = result.slice(1);
+  return { headers, rows };
+}
+
 export function exportRaidToCsv(risks: Risk[], actions: Action[], issues: Issue[], decisions: Decision[]): void {
   const headers = ['Type', 'ID', 'Title / Description', 'Status', 'Severity / Priority', 'Owner', 'Target / Due Date', 'Details / Strategy'];
   const rows = [
