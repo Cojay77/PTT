@@ -1,5 +1,6 @@
 import { query, queryOne, execute, generateId } from '../db';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest } from '../../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest, PortfolioProject, PortfolioProjectStatus, ProjectHealthStatus } from '../../types';
+import { taskQueries } from './tasks';
 
 // ============================================================
 // Milestone queries
@@ -512,9 +513,14 @@ export const noteQueries = {
 // ============================================================
 function rowToActivity(r: Record<string, unknown>): ActivityLog {
   return {
-    id: r.id as string, entityType: r.entity_type as string, entityId: r.entity_id as string,
-    entityTitle: (r.entity_title as string) || '', action: r.action as string,
-    description: (r.description as string) || '', createdAt: r.created_at as string,
+    id: r.id as string,
+    entityType: r.entity_type as string,
+    entityId: r.entity_id as string,
+    entityTitle: (r.entity_title as string) || '',
+    action: r.action as string,
+    description: (r.description as string) || '',
+    previousState: (r.previous_state as string) || undefined,
+    createdAt: r.created_at as string,
   };
 }
 
@@ -522,10 +528,97 @@ export const activityQueries = {
   getRecent(limit = 50): ActivityLog[] {
     return query<Record<string, unknown>>(`SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?`, [limit]).map(rowToActivity);
   },
-  log(entityType: string, entityId: string, entityTitle: string, action: string, description = ''): void {
-    const id = generateId(); const now = new Date().toISOString();
-    execute(`INSERT INTO activity_log (id, entity_type, entity_id, entity_title, action, description, created_at) VALUES (?,?,?,?,?,?,?)`,
-      [id, entityType, entityId, entityTitle, action, description, now]);
+  log(entityType: string, entityId: string, entityTitle: string, action: string, description = '', previousState = ''): void {
+    const id = generateId();
+    const now = new Date().toISOString();
+    try {
+      execute(
+        `INSERT INTO activity_log (id, entity_type, entity_id, entity_title, action, description, previous_state, created_at) VALUES (?,?,?,?,?,?,?,?)`,
+        [id, entityType, entityId, entityTitle, action, description, previousState, now]
+      );
+    } catch {
+      // Fallback if previous_state column isn't migrated yet in some edge cases
+      execute(
+        `INSERT INTO activity_log (id, entity_type, entity_id, entity_title, action, description, created_at) VALUES (?,?,?,?,?,?,?)`,
+        [id, entityType, entityId, entityTitle, action, description, now]
+      );
+    }
+  },
+  revert(activityId: string): { success: boolean; message: string } {
+    const rows = query<Record<string, unknown>>(`SELECT * FROM activity_log WHERE id = ?`, [activityId]);
+    if (rows.length === 0) return { success: false, message: 'Activity entry not found' };
+    const entry = rowToActivity(rows[0]);
+
+    if (entry.action === 'created') {
+      try {
+        switch (entry.entityType) {
+          case 'task': taskQueries.delete(entry.entityId); break;
+          case 'risk': riskQueries.delete(entry.entityId); break;
+          case 'issue': issueQueries.delete(entry.entityId); break;
+          case 'decision': decisionQueries.delete(entry.entityId); break;
+          case 'action': actionQueries.delete(entry.entityId); break;
+          case 'milestone': milestoneQueries.delete(entry.entityId); break;
+          case 'communication': communicationQueries.delete(entry.entityId); break;
+          case 'stakeholder': stakeholderQueries.delete(entry.entityId); break;
+          case 'resource': resourceQueries.delete(entry.entityId); break;
+          case 'absence': absenceQueries.delete(entry.entityId); break;
+          case 'meeting': meetingQueries.delete(entry.entityId); break;
+          case 'note': noteQueries.delete(entry.entityId); break;
+          case 'budget': budgetItemQueries.delete(entry.entityId); break;
+          case 'change-request': changeRequestQueries.delete(entry.entityId); break;
+          default: return { success: false, message: `Unsupported entity type "${entry.entityType}"` };
+        }
+        activityQueries.log(entry.entityType, entry.entityId, entry.entityTitle, 'reverted', `Undone creation of "${entry.entityTitle}"`);
+        return { success: true, message: `Removed newly created ${entry.entityType} "${entry.entityTitle}"` };
+      } catch (err) {
+        return { success: false, message: `Undo failed: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    if (!entry.previousState) {
+      return { success: false, message: 'No snapshot available to revert to.' };
+    }
+
+    try {
+      const prev = JSON.parse(entry.previousState);
+      if (entry.action === 'updated') {
+        switch (entry.entityType) {
+          case 'task': taskQueries.update(entry.entityId, prev); break;
+          case 'risk': riskQueries.update(entry.entityId, prev); break;
+          case 'issue': issueQueries.update(entry.entityId, prev); break;
+          case 'decision': decisionQueries.update(entry.entityId, prev); break;
+          case 'action': actionQueries.update(entry.entityId, prev); break;
+          case 'milestone': milestoneQueries.update(entry.entityId, prev); break;
+          case 'communication': communicationQueries.update(entry.entityId, prev); break;
+          case 'stakeholder': stakeholderQueries.update(entry.entityId, prev); break;
+          case 'resource': resourceQueries.update(entry.entityId, prev); break;
+          case 'absence': absenceQueries.update(entry.entityId, prev); break;
+          case 'meeting': meetingQueries.update(entry.entityId, prev); break;
+          case 'note': noteQueries.update(entry.entityId, prev); break;
+          case 'budget': budgetItemQueries.update(entry.entityId, prev); break;
+          case 'change-request': changeRequestQueries.update(entry.entityId, prev); break;
+          default: return { success: false, message: `Cannot revert entity type "${entry.entityType}"` };
+        }
+        activityQueries.log(entry.entityType, entry.entityId, entry.entityTitle, 'reverted', `Restored "${entry.entityTitle}" to prior state`);
+        return { success: true, message: `Restored "${entry.entityTitle}" to previous state` };
+      } else if (entry.action === 'deleted') {
+        switch (entry.entityType) {
+          case 'task': taskQueries.create(prev); break;
+          case 'risk': riskQueries.create(prev); break;
+          case 'issue': issueQueries.create(prev); break;
+          case 'decision': decisionQueries.create(prev); break;
+          case 'action': actionQueries.create(prev); break;
+          case 'milestone': milestoneQueries.create(prev); break;
+          default: return { success: false, message: `Cannot restore deleted entity of type "${entry.entityType}"` };
+        }
+        activityQueries.log(entry.entityType, entry.entityId, entry.entityTitle, 'reverted', `Restored deleted "${entry.entityTitle}"`);
+        return { success: true, message: `Restored deleted "${entry.entityTitle}"` };
+      }
+    } catch (err) {
+      return { success: false, message: `Revert failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    return { success: false, message: 'Action could not be undone' };
   },
 };
 
@@ -1082,3 +1175,87 @@ export const changeRequestQueries = {
   },
   delete(id: string) { execute(`DELETE FROM change_requests WHERE id = ?`, [id]); },
 };
+
+// ============================================================
+// Portfolio Project queries
+// ============================================================
+function rowToPortfolio(r: Record<string, unknown>): PortfolioProject {
+  return {
+    id: r.id as string,
+    name: (r.name as string) || '',
+    code: (r.code as string) || '',
+    description: (r.description as string) || '',
+    status: (r.status as PortfolioProjectStatus) || 'active',
+    health: (r.health as ProjectHealthStatus) || 'green',
+    manager: (r.manager as string) || '',
+    sponsor: (r.sponsor as string) || '',
+    startDate: (r.start_date as string) || '',
+    targetDate: (r.target_date as string) || '',
+    currentPhase: (r.current_phase as string) || '',
+    progressPercent: Number(r.progress_percent || 0),
+    budgetPlanned: Number(r.budget_planned || 0),
+    budgetActual: Number(r.budget_actual || 0),
+    currency: (r.currency as string) || 'EUR',
+    keyMilestone: (r.key_milestone as string) || '',
+    filePath: (r.file_path as string) || undefined,
+    notes: (r.notes as string) || '',
+    createdAt: (r.created_at as string) || '',
+    updatedAt: (r.updated_at as string) || '',
+  };
+}
+
+export const portfolioQueries = {
+  getAll(): PortfolioProject[] {
+    try {
+      return query<Record<string, unknown>>(
+        `SELECT * FROM portfolio_projects ORDER BY 
+         CASE status WHEN 'active' THEN 0 WHEN 'planning' THEN 1 WHEN 'on-hold' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END,
+         target_date ASC`
+      ).map(rowToPortfolio);
+    } catch {
+      return [];
+    }
+  },
+  getById(id: string): PortfolioProject | null {
+    try {
+      const rows = query<Record<string, unknown>>(`SELECT * FROM portfolio_projects WHERE id = ?`, [id]);
+      return rows.length > 0 ? rowToPortfolio(rows[0]) : null;
+    } catch {
+      return null;
+    }
+  },
+  create(p: Partial<PortfolioProject>): PortfolioProject {
+    const id = p.id || generateId();
+    const now = new Date().toISOString();
+    execute(
+      `INSERT INTO portfolio_projects (id, name, code, description, status, health, manager, sponsor, start_date, target_date, current_phase, progress_percent, budget_planned, budget_actual, currency, key_milestone, file_path, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        id, p.name || 'New Project', p.code || '', p.description || '', p.status || 'active', p.health || 'green',
+        p.manager || '', p.sponsor || '', p.startDate || '', p.targetDate || '', p.currentPhase || '',
+        p.progressPercent ?? 0, p.budgetPlanned ?? 0, p.budgetActual ?? 0, p.currency || 'EUR',
+        p.keyMilestone || '', p.filePath || '', p.notes || '', now, now
+      ]
+    );
+    return this.getById(id)!;
+  },
+  update(id: string, updates: Partial<PortfolioProject>): PortfolioProject | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const now = new Date().toISOString();
+    const merged = { ...existing, ...updates, updatedAt: now };
+    execute(
+      `UPDATE portfolio_projects SET name=?, code=?, description=?, status=?, health=?, manager=?, sponsor=?, start_date=?, target_date=?, current_phase=?, progress_percent=?, budget_planned=?, budget_actual=?, currency=?, key_milestone=?, file_path=?, notes=?, updated_at=? WHERE id=?`,
+      [
+        merged.name, merged.code, merged.description, merged.status, merged.health,
+        merged.manager, merged.sponsor, merged.startDate, merged.targetDate, merged.currentPhase,
+        merged.progressPercent, merged.budgetPlanned, merged.budgetActual, merged.currency,
+        merged.keyMilestone, merged.filePath || '', merged.notes, now, id
+      ]
+    );
+    return this.getById(id);
+  },
+  delete(id: string): void {
+    execute(`DELETE FROM portfolio_projects WHERE id = ?`, [id]);
+  }
+};
+

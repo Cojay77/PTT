@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, Bell, Sun, Moon, Save, Download, PanelLeftClose, PanelLeftOpen,
   AlertCircle, AlertTriangle, Info, CheckCircle2, X, ArrowRight,
-  FolderKanban, ChevronDown, Upload, PlusCircle, Copy, Lock, RefreshCw, FolderOpen, Check, Cloud
+  FolderKanban, ChevronDown, Upload, PlusCircle, Copy, Lock, RefreshCw, FolderOpen, Check, Cloud,
+  Briefcase,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
@@ -16,9 +17,13 @@ import {
 import type { ProjectListItem } from '../../types/electron';
 import { projectConfigQueries } from '../../db/queries';
 import { format } from 'date-fns';
+import {
+  requestNotificationPermission, getNotificationPermission, sendDesktopNotification
+} from '../../utils/notifications';
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/portfolio': 'Portfolio',
   '/overview': 'Project Overview',
   '/tasks': 'Tasks',
   '/backlog': 'Backlog',
@@ -534,6 +539,16 @@ export default function TopBar() {
               <div className="project-dropdown-actions">
                 <button
                   className="project-dropdown-item"
+                  style={{ color: 'var(--accent)', fontWeight: 600 }}
+                  onClick={() => {
+                    setProjectMenuOpen(false);
+                    navigate('/portfolio');
+                  }}
+                >
+                  <Briefcase size={14} /> Open Portfolio Overview...
+                </button>
+                <button
+                  className="project-dropdown-item"
                   onClick={async () => {
                     setProjectMenuOpen(false);
                     await openProjectFileDialog();
@@ -668,15 +683,36 @@ export default function TopBar() {
                     {totalAlerts} active
                   </span>
                 </div>
-                {totalAlerts > 0 && (
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: 11, padding: '2px 6px', height: 'auto' }}
-                    onClick={dismissAll}
-                  >
-                    Dismiss all
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {getNotificationPermission() !== 'granted' ? (
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      style={{ fontSize: 10, padding: '2px 6px', color: 'var(--accent)' }}
+                      onClick={async () => {
+                        const granted = await requestNotificationPermission();
+                        if (granted) {
+                          sendDesktopNotification('PTT Desktop Alerts Enabled', 'You will now receive desktop notifications for critical project alerts.');
+                        }
+                      }}
+                      title="Enable OS system notifications for critical alerts"
+                    >
+                      🔔 Enable OS Alerts
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 10, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      ● OS Alerts Active
+                    </span>
+                  )}
+                  {totalAlerts > 0 && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11, padding: '2px 6px', height: 'auto' }}
+                      onClick={dismissAll}
+                    >
+                      Dismiss all
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="alerts-list">

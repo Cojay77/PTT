@@ -283,6 +283,7 @@ export interface ActivityLog {
   entityTitle: string;
   action: string;
   description: string;
+  previousState?: string;
   createdAt: string;
 }
 
@@ -417,3 +418,32 @@ export interface SortState {
 export type ViewMode = 'table' | 'kanban' | 'timeline' | 'cards';
 
 export type QuickCaptureType = 'task' | 'note' | 'risk' | 'issue' | 'action' | 'decision' | 'communication' | 'meeting';
+
+// ============================================================
+// Portfolio Types
+// ============================================================
+export type ProjectHealthStatus = 'green' | 'amber' | 'red';
+export type PortfolioProjectStatus = 'active' | 'planning' | 'on-hold' | 'completed' | 'cancelled';
+
+export interface PortfolioProject {
+  id: ID;
+  name: string;
+  code: string;
+  description: string;
+  status: PortfolioProjectStatus;
+  health: ProjectHealthStatus;
+  manager: string;
+  sponsor: string;
+  startDate: string;
+  targetDate: string;
+  currentPhase: string;
+  progressPercent: number;
+  budgetPlanned: number;
+  budgetActual: number;
+  currency: string;
+  keyMilestone: string;
+  filePath?: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}

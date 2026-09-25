@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initDatabase } from './db';
 import {
   hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty,
-  seedChangeRequestsIfEmpty, seedStakeholderAbsencesIfEmpty
+  seedChangeRequestsIfEmpty, seedStakeholderAbsencesIfEmpty, seedPortfolioIfEmpty
 } from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
@@ -33,6 +33,7 @@ import Handover from './pages/Handover';
 import Settings from './pages/Settings';
 import Budget from './pages/Budget';
 import ChangeRequests from './pages/ChangeRequests';
+import Portfolio from './pages/Portfolio';
 import LoadingScreen from './components/ui/LoadingScreen';
 
 export default function App() {
@@ -51,6 +52,9 @@ export default function App() {
           seedBudgetIfEmpty();
           seedChangeRequestsIfEmpty();
           seedStakeholderAbsencesIfEmpty();
+          seedPortfolioIfEmpty();
+        } else {
+          seedPortfolioIfEmpty();
         }
         loadTasks();
         loadAll();
@@ -87,6 +91,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="portfolio" element={<Portfolio />} />
           <Route path="overview" element={<ProjectOverview />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="backlog" element={<Backlog />} />

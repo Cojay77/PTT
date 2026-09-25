@@ -5,6 +5,7 @@ import {
   Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale,
   CalendarCheck, Shield, BookOpen, BarChart3, ClipboardCheck, GitBranch,
   HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle, DollarSign, GitMerge,
+  Briefcase,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
@@ -20,6 +21,7 @@ const navGroups = [
     label: 'Command',
     items: [
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { path: '/portfolio', icon: Briefcase, label: 'Portfolio' },
       { path: '/overview', icon: FolderKanban, label: 'Project Overview' },
     ],
   },

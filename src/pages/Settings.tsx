@@ -1,19 +1,53 @@
 import { useState } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { exportDatabase, importDatabase, saveDbNow } from '../db';
-import { Download, Upload, Trash2, Sun, Moon, Database, RefreshCw } from 'lucide-react';
+import { Download, Upload, Trash2, Sun, Moon, Database, RefreshCw, Bell } from 'lucide-react';
 import { hasDemoData, seedDemoData } from '../data/demoData';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
 import { exportFullJson, exportTasksToCsv, exportRaidToCsv, exportToCsv } from '../utils/export';
 import { projectConfigQueries, activityQueries } from '../db/queries';
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  sendDesktopNotification,
+} from '../utils/notifications';
 
 export default function Settings() {
   const { theme, setTheme } = useUIStore();
   const [resetConfirm, setResetConfirm] = useState(false);
   const [importMsg, setImportMsg] = useState('');
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(getNotificationPermission());
+  const [notifMsg, setNotifMsg] = useState('');
   const loadTasks = useTaskStore(s => s.load);
   const loadAll = useDataStore(s => s.loadAll);
+
+  async function handleEnableNotifications() {
+    const granted = await requestNotificationPermission();
+    setNotifPermission(getNotificationPermission());
+    if (granted) {
+      setNotifMsg('Desktop notifications enabled!');
+      sendDesktopNotification('PTT Notifications Enabled', 'You will now receive desktop notifications for critical project alerts.');
+      setTimeout(() => setNotifMsg(''), 3000);
+    } else {
+      setNotifMsg('Notification permission was not granted by your system.');
+      setTimeout(() => setNotifMsg(''), 4000);
+    }
+  }
+
+  function handleTestNotification() {
+    const sent = sendDesktopNotification(
+      'PTT Test Notification',
+      'This is a test desktop notification from Project Tracking Tool.'
+    );
+    if (sent) {
+      setNotifMsg('Test notification sent!');
+    } else {
+      setNotifMsg('Could not send notification. Please enable permission first.');
+    }
+    setTimeout(() => setNotifMsg(''), 3000);
+  }
 
   function handleImport() {
     const input = document.createElement('input');
@@ -77,6 +111,41 @@ export default function Settings() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Desktop Notifications (F-18) */}
+        <div className="card">
+          <div className="card-header">
+            <Bell size={16} color="var(--accent)" />
+            <span className="section-title">System & Desktop Notifications</span>
+            <span
+              className={`badge ${notifPermission === 'granted' ? 'badge-success' : notifPermission === 'denied' ? 'badge-danger' : 'badge-neutral'}`}
+              style={{ marginLeft: 'auto', textTransform: 'capitalize' }}
+            >
+              {notifPermission}
+            </span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Enable native system notifications to receive alerts for impending milestones, overdue tasks, and critical risks even when PTT is minimized.
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              {notifPermission !== 'granted' ? (
+                <button className="btn btn-primary" onClick={handleEnableNotifications}>
+                  <Bell size={14} /> Enable Desktop Notifications
+                </button>
+              ) : (
+                <button className="btn btn-secondary" onClick={handleTestNotification}>
+                  <Bell size={14} /> Send Test Notification
+                </button>
+              )}
+            </div>
+            {notifMsg && (
+              <div style={{ color: notifMsg.includes('enabled') || notifMsg.includes('sent') ? 'var(--success)' : 'var(--danger)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                {notifMsg}
+              </div>
+            )}
           </div>
         </div>
 

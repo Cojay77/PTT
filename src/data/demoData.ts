@@ -7,6 +7,7 @@ import {
   actionQueries, communicationQueries, stakeholderQueries, resourceQueries,
   absenceQueries, meetingQueries, noteQueries, activityQueries,
   projectConfigQueries, weeklyReviewQueries, budgetItemQueries, changeRequestQueries,
+  portfolioQueries,
 } from '../db/queries';
 
 export function hasDemoData(): boolean {
@@ -471,3 +472,89 @@ export function seedStakeholderAbsencesIfEmpty(): void {
     console.error('Failed to seed stakeholder absences:', err);
   }
 }
+
+export function seedPortfolioIfEmpty(): void {
+  try {
+    const existing = portfolioQueries.getAll();
+    if (existing.length === 0) {
+      portfolioQueries.create({
+        name: 'Customer Portal Migration',
+        code: 'CPM-2026',
+        description: 'Migration of the legacy customer portal to a modern React/Next.js stack with microservices backend.',
+        status: 'active',
+        health: 'amber',
+        manager: 'Jean-Baptiste Martin',
+        sponsor: 'Claire Fontaine (CTO)',
+        startDate: '2026-04-01',
+        targetDate: '2026-12-31',
+        currentPhase: 'Phase 3 — Development & Testing',
+        progressPercent: 55,
+        budgetPlanned: 185000,
+        budgetActual: 104500,
+        currency: 'EUR',
+        keyMilestone: 'Phase 3 — Customer Portal MVP (Sept 30)',
+        notes: 'Active project in current workspace. Infrastructure delivery delay being actively mitigated.',
+      });
+
+      portfolioQueries.create({
+        name: 'Zero-Trust IAM & SSO Modernization',
+        code: 'SEC-IAM',
+        description: 'Enterprise rollout of Okta SSO, MFA enforcement, and privileged access management (PAM).',
+        status: 'active',
+        health: 'green',
+        manager: 'Sarah Jenkins',
+        sponsor: 'Marc Lefort (IT Director)',
+        startDate: '2026-01-15',
+        targetDate: '2026-10-31',
+        currentPhase: 'Phase 4 — Cutover & Pilot Rollout',
+        progressPercent: 84,
+        budgetPlanned: 240000,
+        budgetActual: 215000,
+        currency: 'EUR',
+        keyMilestone: 'Pilot Group Okta Cutover',
+        notes: 'On track. Pilot validation completed with 98% user satisfaction.',
+      });
+
+      portfolioQueries.create({
+        name: 'Data Lakehouse & Snowflake Migration',
+        code: 'DATA-SNOW',
+        description: 'Consolidation of on-prem data warehouses into Snowflake with real-time dbt pipelines.',
+        status: 'planning',
+        health: 'green',
+        manager: 'David Kumar',
+        sponsor: 'Hélène Vance (Chief Data Officer)',
+        startDate: '2026-07-01',
+        targetDate: '2027-03-31',
+        currentPhase: 'Phase 1 — Schema Architecture',
+        progressPercent: 22,
+        budgetPlanned: 320000,
+        budgetActual: 68000,
+        currency: 'EUR',
+        keyMilestone: 'Bronze Ingestion Architecture Signoff',
+        notes: 'Vendor contracts signed. Data ingestion proof-of-concept successful.',
+      });
+
+      portfolioQueries.create({
+        name: 'Mobile Banking App v3.0 Rewrite',
+        code: 'MOB-V3',
+        description: 'Complete native redesign of iOS and Android mobile apps with biometric authentication.',
+        status: 'active',
+        health: 'red',
+        manager: 'Elena Rostova',
+        sponsor: 'Arthur Pendelton (VP Retail)',
+        startDate: '2026-02-01',
+        targetDate: '2026-11-30',
+        currentPhase: 'Phase 3 — Core Feature Implementation',
+        progressPercent: 48,
+        budgetPlanned: 450000,
+        budgetActual: 420000,
+        currency: 'EUR',
+        keyMilestone: 'Security Penetration Testing Review',
+        notes: 'Critical scope creep in biometric payments module. Budget variance +15% forecast.',
+      });
+    }
+  } catch (err) {
+    console.error('Failed to seed portfolio projects:', err);
+  }
+}
+

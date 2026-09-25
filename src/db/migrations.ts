@@ -96,6 +96,38 @@ const MIGRATIONS: Migration[] = [
       ALTER TABLE decisions ADD COLUMN related_meeting_id TEXT DEFAULT NULL;
     `,
   },
+  {
+    version: 5,
+    up: `
+      ALTER TABLE activity_log ADD COLUMN previous_state TEXT DEFAULT '';
+
+      CREATE TABLE IF NOT EXISTS portfolio_projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        code TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        status TEXT DEFAULT 'active',
+        health TEXT DEFAULT 'green',
+        manager TEXT DEFAULT '',
+        sponsor TEXT DEFAULT '',
+        start_date TEXT DEFAULT '',
+        target_date TEXT DEFAULT '',
+        current_phase TEXT DEFAULT '',
+        progress_percent INTEGER DEFAULT 0,
+        budget_planned REAL DEFAULT 0,
+        budget_actual REAL DEFAULT 0,
+        currency TEXT DEFAULT 'EUR',
+        key_milestone TEXT DEFAULT '',
+        file_path TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_portfolio_status ON portfolio_projects(status);
+      CREATE INDEX IF NOT EXISTS idx_portfolio_health ON portfolio_projects(health);
+    `,
+  },
 ];
 
 function safeRunMigration(db: Database, sql: string) {

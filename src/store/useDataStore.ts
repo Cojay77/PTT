@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest } from '../types';
+import type { Milestone, Risk, Issue, Decision, Action, Communication, Stakeholder, Resource, Absence, Meeting, Note, ActivityLog, ProjectConfig, WeeklyReview, BudgetItem, ChangeRequest, PortfolioProject } from '../types';
 import {
   milestoneQueries, riskQueries, issueQueries, decisionQueries, actionQueries,
   communicationQueries, stakeholderQueries, resourceQueries, absenceQueries,
   meetingQueries, noteQueries, activityQueries, projectConfigQueries, weeklyReviewQueries,
-  budgetItemQueries, changeRequestQueries,
+  budgetItemQueries, changeRequestQueries, portfolioQueries,
 } from '../db/queries';
+import { useTaskStore } from './useTaskStore';
 
 interface DataState {
   projectConfig: ProjectConfig | null;
@@ -24,6 +25,7 @@ interface DataState {
   weeklyReviews: WeeklyReview[];
   budgetItems: BudgetItem[];
   changeRequests: ChangeRequest[];
+  portfolioProjects: PortfolioProject[];
   isLoaded: boolean;
 
   loadAll: () => void;
@@ -44,6 +46,13 @@ interface DataState {
   loadWeeklyReviews: () => void;
   loadBudgetItems: () => void;
   loadChangeRequests: () => void;
+  loadPortfolioProjects: () => void;
+
+  createPortfolioProject: (p: Partial<PortfolioProject>) => PortfolioProject;
+  updatePortfolioProject: (id: string, u: Partial<PortfolioProject>) => void;
+  deletePortfolioProject: (id: string) => void;
+  revertActivity: (activityId: string) => { success: boolean; message: string };
+
 
   // Weekly Reviews
   createWeeklyReview: (w: Partial<WeeklyReview>) => WeeklyReview;
@@ -120,7 +129,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   projectConfig: null,
   milestones: [], risks: [], issues: [], decisions: [], actions: [],
   communications: [], stakeholders: [], resources: [], absences: [],
-  meetings: [], notes: [], activityLog: [], weeklyReviews: [], budgetItems: [], changeRequests: [], isLoaded: false,
+  meetings: [], notes: [], activityLog: [], weeklyReviews: [], budgetItems: [], changeRequests: [],
+  portfolioProjects: [], isLoaded: false,
 
   loadAll: () => {
     set({
@@ -140,6 +150,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       weeklyReviews: weeklyReviewQueries.getAll(),
       budgetItems: budgetItemQueries.getAll(),
       changeRequests: changeRequestQueries.getAll(),
+      portfolioProjects: portfolioQueries.getAll(),
       isLoaded: true,
     });
   },
@@ -165,6 +176,43 @@ export const useDataStore = create<DataState>((set, get) => ({
   loadWeeklyReviews: () => set({ weeklyReviews: weeklyReviewQueries.getAll() }),
   loadBudgetItems: () => set({ budgetItems: budgetItemQueries.getAll() }),
   loadChangeRequests: () => set({ changeRequests: changeRequestQueries.getAll() }),
+  loadPortfolioProjects: () => set({ portfolioProjects: portfolioQueries.getAll() }),
+
+  // Portfolio Projects
+  createPortfolioProject: (p) => {
+    const created = portfolioQueries.create(p);
+    activityQueries.log('portfolio', created.id, created.name, 'created', `Added project "${created.name}" to portfolio`);
+    get().loadPortfolioProjects();
+    get().loadActivity();
+    return created;
+  },
+  updatePortfolioProject: (id, u) => {
+    const prev = portfolioQueries.getById(id);
+    portfolioQueries.update(id, u);
+    if (prev) {
+      activityQueries.log('portfolio', id, prev.name, 'updated', `Updated portfolio project "${prev.name}"`, JSON.stringify(prev));
+    }
+    get().loadPortfolioProjects();
+    get().loadActivity();
+  },
+  deletePortfolioProject: (id) => {
+    const prev = portfolioQueries.getById(id);
+    if (prev) {
+      portfolioQueries.delete(id);
+      activityQueries.log('portfolio', id, prev.name, 'deleted', `Removed "${prev.name}" from portfolio`, JSON.stringify(prev));
+    } else {
+      portfolioQueries.delete(id);
+    }
+    get().loadPortfolioProjects();
+    get().loadActivity();
+  },
+
+  revertActivity: (activityId) => {
+    const res = activityQueries.revert(activityId);
+    get().loadAll();
+    useTaskStore.getState().load();
+    return res;
+  },
 
   // Weekly Reviews
   createWeeklyReview: (w) => {
@@ -185,28 +233,88 @@ export const useDataStore = create<DataState>((set, get) => ({
 
   // Milestones
   createMilestone: (m) => { const r = milestoneQueries.create(m); activityQueries.log('milestone', r.id, r.name, 'created'); get().loadMilestones(); get().loadActivity(); return r; },
-  updateMilestone: (id, u) => { milestoneQueries.update(id, u); get().loadMilestones(); get().loadActivity(); },
-  deleteMilestone: (id) => { milestoneQueries.delete(id); get().loadMilestones(); },
+  updateMilestone: (id, u) => {
+    const prev = milestoneQueries.getById(id);
+    milestoneQueries.update(id, u);
+    if (prev) activityQueries.log('milestone', id, prev.name, 'updated', `Updated milestone "${prev.name}"`, JSON.stringify(prev));
+    get().loadMilestones();
+    get().loadActivity();
+  },
+  deleteMilestone: (id) => {
+    const prev = milestoneQueries.getById(id);
+    if (prev) activityQueries.log('milestone', id, prev.name, 'deleted', `Deleted milestone "${prev.name}"`, JSON.stringify(prev));
+    milestoneQueries.delete(id);
+    get().loadMilestones();
+    get().loadActivity();
+  },
 
   // Risks
   createRisk: (r) => { const created = riskQueries.create(r); activityQueries.log('risk', created.id, created.title, 'created'); get().loadRisks(); get().loadActivity(); return created; },
-  updateRisk: (id, u) => { riskQueries.update(id, u); get().loadRisks(); get().loadActivity(); },
-  deleteRisk: (id) => { riskQueries.delete(id); get().loadRisks(); },
+  updateRisk: (id, u) => {
+    const prev = riskQueries.getById(id);
+    riskQueries.update(id, u);
+    if (prev) activityQueries.log('risk', id, prev.title, 'updated', `Updated risk "${prev.title}"`, JSON.stringify(prev));
+    get().loadRisks();
+    get().loadActivity();
+  },
+  deleteRisk: (id) => {
+    const prev = riskQueries.getById(id);
+    if (prev) activityQueries.log('risk', id, prev.title, 'deleted', `Deleted risk "${prev.title}"`, JSON.stringify(prev));
+    riskQueries.delete(id);
+    get().loadRisks();
+    get().loadActivity();
+  },
 
   // Issues
   createIssue: (i) => { const created = issueQueries.create(i); activityQueries.log('issue', created.id, created.title, 'created'); get().loadIssues(); get().loadActivity(); return created; },
-  updateIssue: (id, u) => { issueQueries.update(id, u); get().loadIssues(); get().loadActivity(); },
-  deleteIssue: (id) => { issueQueries.delete(id); get().loadIssues(); },
+  updateIssue: (id, u) => {
+    const prev = issueQueries.getById(id);
+    issueQueries.update(id, u);
+    if (prev) activityQueries.log('issue', id, prev.title, 'updated', `Updated issue "${prev.title}"`, JSON.stringify(prev));
+    get().loadIssues();
+    get().loadActivity();
+  },
+  deleteIssue: (id) => {
+    const prev = issueQueries.getById(id);
+    if (prev) activityQueries.log('issue', id, prev.title, 'deleted', `Deleted issue "${prev.title}"`, JSON.stringify(prev));
+    issueQueries.delete(id);
+    get().loadIssues();
+    get().loadActivity();
+  },
 
   // Decisions
   createDecision: (d) => { const created = decisionQueries.create(d); activityQueries.log('decision', created.id, created.title, 'created'); get().loadDecisions(); get().loadActivity(); return created; },
-  updateDecision: (id, u) => { decisionQueries.update(id, u); get().loadDecisions(); get().loadActivity(); },
-  deleteDecision: (id) => { decisionQueries.delete(id); get().loadDecisions(); },
+  updateDecision: (id, u) => {
+    const prev = decisionQueries.getById(id);
+    decisionQueries.update(id, u);
+    if (prev) activityQueries.log('decision', id, prev.title, 'updated', `Updated decision "${prev.title}"`, JSON.stringify(prev));
+    get().loadDecisions();
+    get().loadActivity();
+  },
+  deleteDecision: (id) => {
+    const prev = decisionQueries.getById(id);
+    if (prev) activityQueries.log('decision', id, prev.title, 'deleted', `Deleted decision "${prev.title}"`, JSON.stringify(prev));
+    decisionQueries.delete(id);
+    get().loadDecisions();
+    get().loadActivity();
+  },
 
   // Actions
   createAction: (a) => { const created = actionQueries.create(a); activityQueries.log('action', created.id, created.action, 'created'); get().loadActions(); get().loadActivity(); return created; },
-  updateAction: (id, u) => { actionQueries.update(id, u); get().loadActions(); get().loadActivity(); },
-  deleteAction: (id) => { actionQueries.delete(id); get().loadActions(); },
+  updateAction: (id, u) => {
+    const prev = actionQueries.getById(id);
+    actionQueries.update(id, u);
+    if (prev) activityQueries.log('action', id, prev.action, 'updated', `Updated action "${prev.action}"`, JSON.stringify(prev));
+    get().loadActions();
+    get().loadActivity();
+  },
+  deleteAction: (id) => {
+    const prev = actionQueries.getById(id);
+    if (prev) activityQueries.log('action', id, prev.action, 'deleted', `Deleted action "${prev.action}"`, JSON.stringify(prev));
+    actionQueries.delete(id);
+    get().loadActions();
+    get().loadActivity();
+  },
 
   // Communications
   createCommunication: (c) => { const created = communicationQueries.create(c); activityQueries.log('communication', created.id, created.subject, 'created'); get().loadCommunications(); get().loadActivity(); return created; },

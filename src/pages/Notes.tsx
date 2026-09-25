@@ -1,12 +1,14 @@
 import { useState, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Plus, Trash2, Edit3, Star, BookOpen, Search, X, Check, Copy, Download,
   Eye, Code2, Bold, Italic, Heading2, List, CheckSquare, Table, Quote,
-  Columns, LayoutGrid, Calendar, Tag, ArrowLeft
+  Columns, LayoutGrid, Calendar, Tag, ArrowLeft, Link2, Scale, AlertTriangle, CalendarCheck,
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
+import { useTaskStore } from '../store/useTaskStore';
 import { ConfirmDialog, EmptyState } from '../components/ui/shared';
 import { format, parseISO } from 'date-fns';
 import type { Note } from '../types';
@@ -28,7 +30,9 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function Notes() {
-  const { notes, deleteNote, updateNote, createNote } = useDataStore();
+  const navigate = useNavigate();
+  const { notes, deleteNote, updateNote, createNote, decisions, risks, meetings } = useDataStore();
+  const { tasks } = useTaskStore();
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'notebook' | 'grid'>('notebook');
@@ -79,6 +83,52 @@ export default function Notes() {
     }
     return notes.find(n => n.id === selectedNoteId) || null;
   }, [selectedNoteId, notes, pinnedNotes, unpinnedNotes]);
+
+  // Cross-entity references & backlinks
+  const linkedReferences = useMemo(() => {
+    if (!activeNote) return [];
+    const noteTitleLower = activeNote.title.toLowerCase();
+    const contentLower = (activeNote.content || '').toLowerCase();
+    const refs: Array<{ type: 'task' | 'decision' | 'risk' | 'meeting'; id: string; title: string; subtitle: string; path: string }> = [];
+
+    // Check Tasks
+    tasks.forEach(t => {
+      const matchInNote = contentLower.includes(t.title.toLowerCase());
+      const matchInTask = (t.description?.toLowerCase().includes(noteTitleLower) || t.notes?.toLowerCase().includes(noteTitleLower));
+      if (matchInNote || matchInTask) {
+        refs.push({ type: 'task', id: t.id, title: t.title, subtitle: `Task · ${t.status}`, path: '/tasks' });
+      }
+    });
+
+    // Check Decisions
+    decisions.forEach(d => {
+      const matchInNote = contentLower.includes(d.title.toLowerCase());
+      const matchInDecision = (d.context?.toLowerCase().includes(noteTitleLower) || d.finalDecision?.toLowerCase().includes(noteTitleLower));
+      if (matchInNote || matchInDecision) {
+        refs.push({ type: 'decision', id: d.id, title: d.title, subtitle: `Decision · ${d.status}`, path: '/decisions' });
+      }
+    });
+
+    // Check Risks
+    risks.forEach(r => {
+      const matchInNote = contentLower.includes(r.title.toLowerCase());
+      const matchInRisk = (r.description?.toLowerCase().includes(noteTitleLower) || r.mitigationStrategy?.toLowerCase().includes(noteTitleLower));
+      if (matchInNote || matchInRisk) {
+        refs.push({ type: 'risk', id: r.id, title: r.title, subtitle: `Risk · ${r.severity}`, path: '/risks' });
+      }
+    });
+
+    // Check Meetings
+    meetings.forEach(m => {
+      const matchInNote = contentLower.includes(m.title.toLowerCase());
+      const matchInMeeting = (m.agenda?.toLowerCase().includes(noteTitleLower) || m.notes?.toLowerCase().includes(noteTitleLower));
+      if (matchInNote || matchInMeeting) {
+        refs.push({ type: 'meeting', id: m.id, title: m.title, subtitle: `Meeting · ${m.date}`, path: '/meetings' });
+      }
+    });
+
+    return refs;
+  }, [activeNote, tasks, decisions, risks, meetings]);
 
   // Initialize edit form when starting editing
   function startEditing(note?: Note) {
@@ -778,6 +828,63 @@ export default function Notes() {
                           >
                             <Edit3 size={13} style={{ marginRight: 4 }} /> Add Content
                           </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Cross-Entity References & Backlinks Panel */}
+                    <div style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          <Link2 size={14} color="var(--accent)" />
+                          <span>Linked References & Backlinks</span>
+                          {linkedReferences.length > 0 && (
+                            <span className="badge badge-primary badge-sm" style={{ fontSize: 10 }}>{linkedReferences.length}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {linkedReferences.length > 0 ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                          {linkedReferences.map((ref) => {
+                            const Icon = ref.type === 'task' ? CheckSquare : ref.type === 'decision' ? Scale : ref.type === 'risk' ? AlertTriangle : CalendarCheck;
+                            const color = ref.type === 'task' ? 'var(--accent)' : ref.type === 'decision' ? 'var(--purple)' : ref.type === 'risk' ? 'var(--warning)' : 'var(--teal)';
+                            return (
+                              <div
+                                key={`${ref.type}-${ref.id}`}
+                                className="card cursor-pointer"
+                                style={{
+                                  padding: '10px 14px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  transition: 'border-color 0.15s, background 0.15s',
+                                }}
+                                onClick={() => navigate(ref.path)}
+                              >
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+                                  background: `${color}18`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                                }}>
+                                  <Icon size={14} />
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600 }} className="truncate">{ref.title}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{ref.subtitle}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '12px 16px',
+                          background: 'var(--bg-secondary)',
+                          borderRadius: 'var(--radius-md)',
+                          fontSize: 12,
+                          color: 'var(--text-muted)',
+                        }}>
+                          No linked references detected. Mention tasks, decisions, risks, or meetings in this note to automatically link them.
                         </div>
                       )}
                     </div>

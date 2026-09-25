@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, CheckSquare, Zap, Scale, MessageSquare, Shield,
   TrendingUp, Clock, Users, Calendar, ArrowRight, Flame, Milestone,
-  Activity, Target, BarChart2,
+  Activity, Target, BarChart2, RotateCcw,
 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -14,6 +14,7 @@ import {
   communicationQueries, absenceQueries, milestoneQueries, activityQueries,
   projectConfigQueries,
 } from '../db/queries';
+import { useDataStore } from '../store/useDataStore';
 import { StatusBadge, PriorityBadge, SeverityBadge, DateDisplay, ProgressBar, Avatar } from '../components/ui/shared';
 import { format, differenceInDays, parseISO } from 'date-fns';
 
@@ -29,7 +30,9 @@ function computeBurndownData(totalTasks: number, doneTasks: number) {
   ];
 }
 
-function useProjectSnapshot() {
+function useProjectSnapshot(tick = 0) {
+  // tick triggers re-computation on store changes or undos
+  const _tick = tick;
   const config = projectConfigQueries.get();
   const taskStats = taskQueries.getStats() as Record<string, number>;
   const tasks = taskQueries.getAll();
@@ -154,10 +157,19 @@ const LEVEL_ICONS = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const snap = useProjectSnapshot();
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [undoFeedback, setUndoFeedback] = useState<string | null>(null);
+  const snap = useProjectSnapshot(refreshTick);
   const attentionItems = useMemo(() => buildAttentionItems(snap), [snap]);
   const burndownData = useMemo(() => computeBurndownData(snap.totalTasks, snap.doneTasks), [snap.totalTasks, snap.doneTasks]);
   const [activityExpanded, setActivityExpanded] = useState(false);
+
+  const handleUndo = (activityId: string) => {
+    const res = useDataStore.getState().revertActivity(activityId);
+    setUndoFeedback(res.message);
+    setRefreshTick(t => t + 1);
+    setTimeout(() => setUndoFeedback(null), 4000);
+  };
 
   const projectName = snap.config?.name || 'New Project';
   const projectStatus = snap.config?.status || 'on-track';
@@ -478,19 +490,43 @@ export default function Dashboard() {
               )}
             </div>
             <div style={{ padding: '8px 0' }}>
+              {undoFeedback && (
+                <div style={{
+                  margin: '0 16px 10px 16px', padding: '8px 12px', borderRadius: 6,
+                  background: 'var(--accent-soft)', border: '1px solid var(--accent)',
+                  fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+                  display: 'flex', alignItems: 'center', gap: 6, animation: 'fadeIn 0.2s ease-in'
+                }}>
+                  <RotateCcw size={12} color="var(--accent)" />
+                  {undoFeedback}
+                </div>
+              )}
               {(activityExpanded ? snap.activity : snap.activity.slice(0, 10)).map(a => (
-                <div key={a.id} className="timeline-item" style={{ padding: '6px 20px' }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: 7 }} />
-                  <div className="attention-content">
-                    <div className="attention-title" style={{ fontSize: 'var(--text-xs)' }}>
-                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{a.entityType}</span>
-                      {' '}{a.action}:{' '}
-                      <span style={{ color: 'var(--text-secondary)' }}>{a.entityTitle}</span>
-                    </div>
-                    <div className="attention-meta">
-                      {format(new Date(a.createdAt), 'MMM d, HH:mm')}
+                <div key={a.id} className="timeline-item" style={{ padding: '6px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: 7 }} />
+                    <div className="attention-content" style={{ minWidth: 0 }}>
+                      <div className="attention-title" style={{ fontSize: 'var(--text-xs)' }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{a.entityType}</span>
+                        {' '}{a.action}:{' '}
+                        <span style={{ color: 'var(--text-secondary)' }}>{a.entityTitle}</span>
+                      </div>
+                      <div className="attention-meta" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span>{format(new Date(a.createdAt), 'MMM d, HH:mm')}</span>
+                        {a.description && <span style={{ opacity: 0.75 }}>· {a.description}</span>}
+                      </div>
                     </div>
                   </div>
+                  {(a.previousState || a.action === 'created') && a.action !== 'reverted' && (
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => handleUndo(a.id)}
+                      style={{ fontSize: 11, padding: '2px 8px', color: 'var(--accent)', flexShrink: 0, marginLeft: 8 }}
+                      title="Undo / Revert this action"
+                    >
+                      <RotateCcw size={11} style={{ marginRight: 3 }} /> Undo
+                    </button>
+                  )}
                 </div>
               ))}
               {snap.activity.length === 0 && (

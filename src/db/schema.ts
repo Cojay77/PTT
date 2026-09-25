@@ -315,6 +315,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   entity_title TEXT DEFAULT '',
   action TEXT NOT NULL,
   description TEXT DEFAULT '',
+  previous_state TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -399,6 +400,33 @@ CREATE TABLE IF NOT EXISTS change_requests (
 CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
 CREATE INDEX IF NOT EXISTS idx_change_requests_priority ON change_requests(priority);
 
+-- Portfolio Projects (multi-project governance)
+CREATE TABLE IF NOT EXISTS portfolio_projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  code TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  status TEXT DEFAULT 'active',
+  health TEXT DEFAULT 'green',
+  manager TEXT DEFAULT '',
+  sponsor TEXT DEFAULT '',
+  start_date TEXT DEFAULT '',
+  target_date TEXT DEFAULT '',
+  current_phase TEXT DEFAULT '',
+  progress_percent INTEGER DEFAULT 0,
+  budget_planned REAL DEFAULT 0,
+  budget_actual REAL DEFAULT 0,
+  currency TEXT DEFAULT 'EUR',
+  key_milestone TEXT DEFAULT '',
+  file_path TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolio_status ON portfolio_projects(status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_health ON portfolio_projects(health);
+
 -- App settings (key/value)
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -412,5 +440,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 `;
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 

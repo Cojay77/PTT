@@ -404,6 +404,15 @@ ${formData.achievements || '*(No achievements logged)*'}
 - **Pending Decisions:** ${currentSnapshot.pendingDecisions}
 - **Upcoming Milestones:** ${currentSnapshot.upcomingMilestones}
 - **Communications Awaiting Response:** ${currentSnapshot.awaitingCommunications}
+${
+  previousReview && previousSnapshot
+    ? `\n### 🔄 Trend vs Week ${previousReview.weekNumber} (${previousReview.year})
+- **Completed Tasks:** ${currentSnapshot.completedTasks} (${currentSnapshot.completedTasks >= previousSnapshot.completedTasks ? `+${currentSnapshot.completedTasks - previousSnapshot.completedTasks}` : currentSnapshot.completedTasks - previousSnapshot.completedTasks})
+- **Blocked Tasks:** ${currentSnapshot.blockedTasks} (${currentSnapshot.blockedTasks <= previousSnapshot.blockedTasks ? `${currentSnapshot.blockedTasks - previousSnapshot.blockedTasks}` : `+${currentSnapshot.blockedTasks - previousSnapshot.blockedTasks}`})
+- **Overdue Tasks:** ${currentSnapshot.overdueTasks} (${currentSnapshot.overdueTasks <= previousSnapshot.overdueTasks ? `${currentSnapshot.overdueTasks - previousSnapshot.overdueTasks}` : `+${currentSnapshot.overdueTasks - previousSnapshot.overdueTasks}`})
+- **Health Trajectory:** ${previousReview.overallHealth} → **${formData.overallHealth}**`
+    : ''
+}
 
 ${
   currentSnapshot.completedTaskTitles?.length
@@ -781,6 +790,20 @@ ${formData.blockersNotes || '*(None reported)*'}
                       Blocked:{' '}
                       <strong style={{ color: currentSnapshot.blockedTasks <= previousSnapshot.blockedTasks ? 'var(--success)' : 'var(--danger)' }}>
                         {currentSnapshot.blockedTasks <= previousSnapshot.blockedTasks ? `${currentSnapshot.blockedTasks - previousSnapshot.blockedTasks}` : `+${currentSnapshot.blockedTasks - previousSnapshot.blockedTasks}`}
+                      </strong>
+                    </span>
+                    <span className="chip">
+                      Overdue:{' '}
+                      <strong style={{ color: currentSnapshot.overdueTasks <= previousSnapshot.overdueTasks ? 'var(--success)' : 'var(--danger)' }}>
+                        {currentSnapshot.overdueTasks <= previousSnapshot.overdueTasks ? `${currentSnapshot.overdueTasks - previousSnapshot.overdueTasks}` : `+${currentSnapshot.overdueTasks - previousSnapshot.overdueTasks}`}
+                      </strong>
+                    </span>
+                    <span className="chip">
+                      Issues & Risks:{' '}
+                      <strong style={{ color: (currentSnapshot.activeIssues + currentSnapshot.activeRisks) <= (previousSnapshot.activeIssues + previousSnapshot.activeRisks) ? 'var(--success)' : 'var(--danger)' }}>
+                        {(currentSnapshot.activeIssues + currentSnapshot.activeRisks) - (previousSnapshot.activeIssues + previousSnapshot.activeRisks) <= 0
+                          ? `${(currentSnapshot.activeIssues + currentSnapshot.activeRisks) - (previousSnapshot.activeIssues + previousSnapshot.activeRisks)}`
+                          : `+${(currentSnapshot.activeIssues + currentSnapshot.activeRisks) - (previousSnapshot.activeIssues + previousSnapshot.activeRisks)}`}
                       </strong>
                     </span>
                     <span className="chip">
