@@ -5,11 +5,12 @@ import {
   Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale,
   CalendarCheck, Shield, BookOpen, BarChart3, ClipboardCheck, GitBranch,
   HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle, DollarSign, GitMerge,
-  Briefcase,
+  Briefcase, Folders, ChevronsUpDown,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
 import { useTaskStore } from '../../store/useTaskStore';
+import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 
 interface BadgeInfo {
   count: number;
@@ -21,6 +22,7 @@ const navGroups = [
     label: 'Command',
     items: [
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { path: '/projects', icon: Folders, label: 'Projects Hub' },
       { path: '/portfolio', icon: Briefcase, label: 'Portfolio' },
       { path: '/overview', icon: FolderKanban, label: 'Project Overview' },
     ],
@@ -87,6 +89,8 @@ export default function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed, setQuickCaptureOpen } = useUIStore();
   const tasks = useTaskStore((s) => s.tasks);
   const { risks, issues, decisions, actions, communications, milestones, projectConfig, changeRequests } = useDataStore();
+
+  const setSwitcherOpen = useWorkspaceStore((s) => s.setSwitcherOpen);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -184,12 +188,24 @@ export default function Sidebar() {
           </button>
         ) : (
           <>
-            <div className="sidebar-logo">
+            <button
+              className="sidebar-logo btn-icon"
+              onClick={() => setSwitcherOpen(true)}
+              title="Switch project (Alt+P)"
+            >
               <LayoutDashboard />
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sidebar-project-name truncate" title={projectName}>{projectName}</div>
-              {projectCode && <div className="sidebar-project-code">{projectCode}</div>}
+            </button>
+            <div
+              className="flex items-center gap-1 cursor-pointer"
+              style={{ minWidth: 0, flex: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
+              onClick={() => setSwitcherOpen(true)}
+              title="Switch project (Alt+P)"
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="sidebar-project-name truncate" title={projectName}>{projectName}</div>
+                {projectCode && <div className="sidebar-project-code">{projectCode}</div>}
+              </div>
+              <ChevronsUpDown size={13} style={{ color: 'var(--text-sidebar)', opacity: 0.7, flexShrink: 0 }} />
             </div>
             <button
               className="btn-icon btn-ghost"

@@ -9,11 +9,13 @@ import {
 import { useUIStore } from '../../store/useUIStore';
 import { useDataStore } from '../../store/useDataStore';
 import { useTaskStore } from '../../store/useTaskStore';
+import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import {
   saveDbNow, exportDatabase, openProjectFileDialog, saveProjectAsDialog,
-  createNewBlankProject, getCurrentProjectFilePath, onProjectFileChange,
-  openProjectByFilePath, isReadOnlyProject, getActiveLockInfo, setReadOnlyMode
+  getCurrentProjectFilePath, onProjectFileChange,
+  openProjectByFilePath, isReadOnlyProject, getActiveLockInfo, switchProject,
 } from '../../db';
+import { ProjectAvatar } from '../workspace/workspaceUtils';
 import type { ProjectListItem } from '../../types/electron';
 import { projectConfigQueries } from '../../db/queries';
 import { format } from 'date-fns';
@@ -23,6 +25,7 @@ import {
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/projects': 'Projects Hub',
   '/portfolio': 'Portfolio',
   '/overview': 'Project Overview',
   '/tasks': 'Tasks',
@@ -77,6 +80,8 @@ export default function TopBar() {
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(getCurrentProjectFilePath());
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+
+  const { projects: wsProjects, activeId: wsActiveId, setSwitcherOpen, setNewProjectOpen } = useWorkspaceStore();
 
   const [sharedFolder, setSharedFolder] = useState<string | null>(null);
   const [projectList, setProjectList] = useState<ProjectListItem[]>([]);
@@ -455,85 +460,113 @@ export default function TopBar() {
                 )}
               </div>
 
-              {/* Shared Team Workspace / Google Drive Section */}
+              {/* Workspace Projects List */}
               <div className="project-dropdown-section-title">
-                <span>Shared Projects (Google Drive)</span>
-                {isElectron && (
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={async () => {
-                      const folder = await window.electronAPI?.selectProjectsFolder();
-                      if (folder) {
-                        setSharedFolder(folder);
-                        await refreshProjectsList();
-                      }
-                    }}
-                    title="Choose Google Drive synced folder"
-                    style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent)' }}
-                  >
-                    <FolderOpen size={12} /> {sharedFolder ? 'Change Folder' : 'Set Folder'}
-                  </button>
-                )}
+                <span>Projects ({wsProjects.length})</span>
+                <button
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => {
+                    setProjectMenuOpen(false);
+                    setNewProjectOpen(true);
+                  }}
+                  title="Create new project"
+                  style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent)' }}
+                >
+                  <PlusCircle size={12} /> New
+                </button>
               </div>
 
-              {sharedFolder ? (
-                <div className="project-list-scroll">
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 10px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    📁 {sharedFolder}
-                  </div>
-                  {projectList.length === 0 ? (
-                    <div style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)' }}>
-                      No .ptt project files in this folder yet.
-                    </div>
-                  ) : (
-                    projectList.map((item) => {
-                      const isActive = currentFilePath === item.filePath;
-                      return (
-                        <button
-                          key={item.filePath}
-                          className={`project-list-item-btn${isActive ? ' active' : ''}`}
-                          onClick={async () => {
-                            setProjectMenuOpen(false);
-                            await openProjectByFilePath(item.filePath);
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                            {isActive ? (
-                              <Check size={14} color="var(--accent)" />
-                            ) : (
-                              <FolderKanban size={14} color="var(--text-muted)" />
-                            )}
-                            <div style={{ textAlign: 'left', minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {item.fileName.replace(/\.(ptt|db)$/, '')}
-                              </div>
-                              {item.lockInfo && !isActive && (
-                                <div style={{ fontSize: 10, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                  <Lock size={9} /> Piloted by {item.lockInfo.pilot}
-                                </div>
-                              )}
-                            </div>
+              <div className="project-list-scroll">
+                {wsProjects.map((p) => {
+                  const isActive = p.id === wsActiveId;
+                  return (
+                    <button
+                      key={p.id}
+                      className={`project-list-item-btn${isActive ? ' active' : ''}`}
+                      onClick={async () => {
+                        setProjectMenuOpen(false);
+                        if (!isActive) {
+                          await switchProject(p.id);
+                        }
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <ProjectAvatar project={p} size={20} />
+                        <div style={{ textAlign: 'left', minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {p.name}
                           </div>
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                            {item.fileName.endsWith('.ptt') ? '.ptt' : '.db'}
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              ) : (
-                <div style={{ padding: '8px 14px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {isElectron ? (
-                    <div>
-                      Point PTT to your team's Google Drive folder to list and switch projects in 1 click.
+                          {p.code && (
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {p.code}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {isActive ? (
+                        <Check size={14} color="var(--accent)" />
+                      ) : (
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Switch</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Shared Team Workspace / Google Drive Section (if Electron) */}
+              {isElectron && (
+                <>
+                  <div className="project-dropdown-section-title" style={{ marginTop: 6 }}>
+                    <span>Shared Projects (Google Drive)</span>
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      onClick={async () => {
+                        const folder = await window.electronAPI?.selectProjectsFolder();
+                        if (folder) {
+                          setSharedFolder(folder);
+                          await refreshProjectsList();
+                        }
+                      }}
+                      title="Choose Google Drive synced folder"
+                      style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent)' }}
+                    >
+                      <FolderOpen size={12} /> {sharedFolder ? 'Change Folder' : 'Set Folder'}
+                    </button>
+                  </div>
+
+                  {sharedFolder ? (
+                    <div className="project-list-scroll">
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 10px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        📁 {sharedFolder}
+                      </div>
+                      {projectList.map((item) => {
+                        const isActive = currentFilePath === item.filePath;
+                        return (
+                          <button
+                            key={item.filePath}
+                            className={`project-list-item-btn${isActive ? ' active' : ''}`}
+                            onClick={async () => {
+                              setProjectMenuOpen(false);
+                              await openProjectByFilePath(item.filePath);
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                              <FolderKanban size={14} color="var(--text-muted)" />
+                              <div style={{ textAlign: 'left', minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {item.fileName.replace(/\.(ptt|db)$/, '')}
+                                </div>
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {item.fileName.endsWith('.ptt') ? '.ptt' : '.db'}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    <div>
-                      Running in web mode. In Desktop mode, choose a Google Drive folder to list all team projects automatically.
-                    </div>
-                  )}
-                </div>
+                  ) : null}
+                </>
               )}
 
               <div className="project-dropdown-actions">
@@ -542,10 +575,28 @@ export default function TopBar() {
                   style={{ color: 'var(--accent)', fontWeight: 600 }}
                   onClick={() => {
                     setProjectMenuOpen(false);
-                    navigate('/portfolio');
+                    navigate('/projects');
                   }}
                 >
-                  <Briefcase size={14} /> Open Portfolio Overview...
+                  <FolderKanban size={14} /> Open Projects Hub...
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={() => {
+                    setProjectMenuOpen(false);
+                    setSwitcherOpen(true);
+                  }}
+                >
+                  <Search size={14} /> Search & Switch Projects (Alt+P)...
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={() => {
+                    setProjectMenuOpen(false);
+                    setNewProjectOpen(true);
+                  }}
+                >
+                  <PlusCircle size={14} /> New Project...
                 </button>
                 <button
                   className="project-dropdown-item"
@@ -554,7 +605,7 @@ export default function TopBar() {
                     await openProjectFileDialog();
                   }}
                 >
-                  <Upload size={14} /> Open Project (.ptt / .db)...
+                  <Upload size={14} /> Open / Import Project (.ptt / .db)...
                 </button>
                 <button
                   className="project-dropdown-item"
@@ -563,18 +614,7 @@ export default function TopBar() {
                     await saveProjectAsDialog(projectName ? `${projectName.replace(/\s+/g, '_')}.ptt` : 'Project.ptt');
                   }}
                 >
-                  <Download size={14} /> Save Project As (.ptt)...
-                </button>
-                <button
-                  className="project-dropdown-item"
-                  onClick={async () => {
-                    setProjectMenuOpen(false);
-                    if (window.confirm('Create a new blank project? Make sure you have saved or exported your current project first.')) {
-                      await createNewBlankProject();
-                    }
-                  }}
-                >
-                  <PlusCircle size={14} /> New Blank Project
+                  <Download size={14} /> Save Active Project As (.ptt)...
                 </button>
                 <button
                   className="project-dropdown-item"
@@ -584,6 +624,15 @@ export default function TopBar() {
                   }}
                 >
                   <Copy size={14} /> Duplicate Project (.ptt)
+                </button>
+                <button
+                  className="project-dropdown-item"
+                  onClick={() => {
+                    setProjectMenuOpen(false);
+                    navigate('/portfolio');
+                  }}
+                >
+                  <Briefcase size={14} /> Portfolio Overview...
                 </button>
               </div>
             </div>

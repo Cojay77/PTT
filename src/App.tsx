@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { initDatabase } from './db';
+import { initDatabase, isFreshWorkspace } from './db';
 import {
   hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty,
   seedChangeRequestsIfEmpty, seedStakeholderAbsencesIfEmpty, seedPortfolioIfEmpty
 } from './data/demoData';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
+import { useWorkspaceStore } from './store/useWorkspaceStore';
 import Layout from './components/layout/Layout';
 
 // Pages
 import Dashboard from './pages/Dashboard';
+import Projects from './pages/Projects';
 import ProjectOverview from './pages/ProjectOverview';
 import Tasks from './pages/Tasks';
 import Backlog from './pages/Backlog';
@@ -41,12 +43,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const loadTasks = useTaskStore((s) => s.load);
   const loadAll = useDataStore((s) => s.loadAll);
+  const refreshWorkspace = useWorkspaceStore((s) => s.refresh);
 
   useEffect(() => {
     initDatabase()
       .then(() => {
-        // Seed demo data if the project is empty
-        if (!hasDemoData()) {
+        // Only auto-seed demo data if it's the very first time the app is launched on an empty workspace
+        if (isFreshWorkspace() && !hasDemoData()) {
           seedDemoData();
           seedWeeklyReviewsIfEmpty();
           seedBudgetIfEmpty();
@@ -58,6 +61,7 @@ export default function App() {
         }
         loadTasks();
         loadAll();
+        void refreshWorkspace();
         setDbReady(true);
       })
       .catch((err) => {
@@ -68,17 +72,18 @@ export default function App() {
     const handleReload = () => {
       loadTasks();
       loadAll();
+      void refreshWorkspace();
     };
     window.addEventListener('ptt:data-reloaded', handleReload);
     return () => window.removeEventListener('ptt:data-reloaded', handleReload);
-  }, []);
+  }, [loadTasks, loadAll, refreshWorkspace]);
 
   if (error) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, fontFamily: 'Inter, sans-serif', color: '#e55', padding: 32 }}>
         <h2>Failed to initialize database</h2>
         <p style={{ color: '#888', maxWidth: 480, textAlign: 'center' }}>{error}</p>
-        <p style={{ color: '#666', fontSize: 13 }}>Make sure you're running the app via <code>npm run dev</code> (not opening index.html directly).</p>
+        <p style={{ color: '#666', fontSize: 13 }}>Make sure you're running the app in a modern browser with IndexedDB support.</p>
       </div>
     );
   }
@@ -91,6 +96,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="projects" element={<Projects />} />
           <Route path="portfolio" element={<Portfolio />} />
           <Route path="overview" element={<ProjectOverview />} />
           <Route path="tasks" element={<Tasks />} />

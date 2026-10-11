@@ -1,27 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/useUIStore';
-import { exportDatabase, importDatabase, saveDbNow } from '../db';
-import { Download, Upload, Trash2, Sun, Moon, Database, RefreshCw, Bell } from 'lucide-react';
-import { hasDemoData, seedDemoData } from '../data/demoData';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
+import {
+  saveDbNow, exportProjectFile, exportWorkspaceBundle, importWorkspaceBundle,
+  openProjectFileDialog, resetWorkspace, resetCurrentProject, getStorageEstimate
+} from '../db';
+import { Download, Upload, Trash2, Sun, Moon, Database, RefreshCw, Bell, FolderKanban, HardDrive } from 'lucide-react';
+import { seedDemoData } from '../data/demoData';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
 import { exportFullJson, exportTasksToCsv, exportRaidToCsv, exportToCsv } from '../utils/export';
 import { projectConfigQueries, activityQueries } from '../db/queries';
 import {
-  isNotificationSupported,
   getNotificationPermission,
   requestNotificationPermission,
   sendDesktopNotification,
 } from '../utils/notifications';
+import { formatBytes } from '../components/workspace/workspaceUtils';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { theme, setTheme } = useUIStore();
-  const [resetConfirm, setResetConfirm] = useState(false);
+  const { projects, refresh: refreshWorkspace } = useWorkspaceStore();
+  const [resetConfirmProject, setResetConfirmProject] = useState(false);
+  const [resetConfirmAll, setResetConfirmAll] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(getNotificationPermission());
   const [notifMsg, setNotifMsg] = useState('');
+  const [storageEstimate, setStorageEstimate] = useState<{ usage: number; quota: number; persisted: boolean } | null>(null);
+
   const loadTasks = useTaskStore(s => s.load);
   const loadAll = useDataStore(s => s.loadAll);
+
+  useEffect(() => {
+    void getStorageEstimate().then(setStorageEstimate);
+  }, []);
 
   async function handleEnableNotifications() {
     const granted = await requestNotificationPermission();
@@ -49,37 +63,70 @@ export default function Settings() {
     setTimeout(() => setNotifMsg(''), 3000);
   }
 
-  function handleImport() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.ptt,.db,application/x-sqlite3';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      try {
-        await importDatabase(file);
+  async function handleImportProject() {
+    try {
+      const fileName = await openProjectFileDialog();
+      if (fileName) {
         loadTasks();
         loadAll();
-        setImportMsg('Database imported successfully!');
-        setTimeout(() => setImportMsg(''), 3000);
-      } catch (err) {
-        setImportMsg('Failed to import database: ' + String(err));
+        await refreshWorkspace();
+        setImportMsg(`Project "${fileName}" imported into workspace!`);
+        setTimeout(() => setImportMsg(''), 3500);
       }
-    };
-    input.click();
+    } catch (err) {
+      setImportMsg('Failed to import project: ' + String(err));
+    }
   }
 
-  function handleReset() {
-    if (!resetConfirm) { setResetConfirm(true); return; }
-    localStorage.removeItem('ptt_db');
-    window.location.reload();
+  async function handleExportWorkspace() {
+    try {
+      const count = await exportWorkspaceBundle();
+      setImportMsg(`Exported bundle with ${count} project(s)!`);
+      setTimeout(() => setImportMsg(''), 3500);
+    } catch (err) {
+      setImportMsg('Failed to export bundle: ' + String(err));
+    }
+  }
+
+  async function handleRestoreWorkspace(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const count = await importWorkspaceBundle(file);
+      await refreshWorkspace();
+      loadTasks();
+      loadAll();
+      setImportMsg(`Restored ${count} project(s) into workspace!`);
+      setTimeout(() => setImportMsg(''), 3500);
+    } catch (err) {
+      setImportMsg('Failed to restore bundle: ' + String(err));
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  async function handleResetCurrentProject() {
+    if (!resetConfirmProject) { setResetConfirmProject(true); return; }
+    await resetCurrentProject();
+    loadTasks();
+    loadAll();
+    await refreshWorkspace();
+    setResetConfirmProject(false);
+    setImportMsg('Current project reset to a clean state.');
+    setTimeout(() => setImportMsg(''), 3000);
+  }
+
+  async function handleResetAllWorkspace() {
+    if (!resetConfirmAll) { setResetConfirmAll(true); return; }
+    await resetWorkspace();
   }
 
   function handleReseed() {
     seedDemoData();
     loadTasks();
     loadAll();
-    setImportMsg('Demo data added!');
+    void refreshWorkspace();
+    setImportMsg('Demo data added to the active project!');
     setTimeout(() => setImportMsg(''), 3000);
   }
 
@@ -87,10 +134,10 @@ export default function Settings() {
     <div>
       <div className="mb-6">
         <h1 className="page-title">Settings</h1>
-        <p className="page-subtitle">Appearance, data management, database backup</p>
+        <p className="page-subtitle">Appearance, multi-project workspace, backups and storage</p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 680 }}>
         {/* Appearance */}
         <div className="card">
           <div className="card-header"><Sun size={16} color="var(--accent)" /><span className="section-title">Appearance</span></div>
@@ -114,7 +161,80 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Desktop Notifications (F-18) */}
+        {/* Workspace & Multi-Project */}
+        <div className="card">
+          <div className="card-header">
+            <FolderKanban size={16} color="var(--accent)" />
+            <span className="section-title">Multi-Project Workspace</span>
+            <span className="badge badge-primary" style={{ marginLeft: 'auto' }}>
+              {projects.length} project{projects.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              PTT is completely web-first and works without any executable or cloud requirement.
+              Your projects are isolated in browser storage as fast in-memory SQLite instances.
+            </p>
+
+            {storageEstimate && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', fontSize: 13 }}>
+                <Database size={16} color="var(--accent)" />
+                <div>
+                  <strong>Storage Usage:</strong> {formatBytes(storageEstimate.usage)} used
+                  {storageEstimate.persisted && <span style={{ color: 'var(--success)', marginLeft: 8 }}>● Persistent</span>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 flex-wrap">
+              <button className="btn btn-primary" onClick={() => navigate('/projects')}>
+                <FolderKanban size={14} /> Open Projects Hub
+              </button>
+              <button className="btn btn-secondary" onClick={() => useWorkspaceStore.getState().setSwitcherOpen(true)}>
+                Quick Switcher (Alt+P)
+              </button>
+              <button className="btn btn-secondary" onClick={() => useWorkspaceStore.getState().setNewProjectOpen(true)}>
+                + New Project
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Database Backup & Restore */}
+        <div className="card">
+          <div className="card-header"><Database size={16} color="var(--accent)" /><span className="section-title">Database Backup &amp; Portability</span></div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Export individual project files (<code>.ptt</code>) or a full workspace bundle (<code>.pttw</code>) containing all your projects.
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              <button className="btn btn-secondary" onClick={saveDbNow}>
+                <Download size={14} /> Save Current Now
+              </button>
+              <button className="btn btn-secondary" onClick={() => exportProjectFile()}>
+                <Download size={14} /> Export Current (.ptt)
+              </button>
+              <button className="btn btn-secondary" onClick={handleExportWorkspace}>
+                <Download size={14} /> Backup All Projects (.pttw)
+              </button>
+              <button className="btn btn-secondary" onClick={handleImportProject}>
+                <Upload size={14} /> Import Project (.ptt)
+              </button>
+              <label className="btn btn-secondary cursor-pointer">
+                <HardDrive size={14} /> Restore Bundle (.pttw)
+                <input
+                  type="file"
+                  accept=".pttw,application/json"
+                  style={{ display: 'none' }}
+                  onChange={handleRestoreWorkspace}
+                />
+              </label>
+            </div>
+            {importMsg && <div style={{ color: 'var(--success)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>{importMsg}</div>}
+          </div>
+        </div>
+
+        {/* Desktop Notifications */}
         <div className="card">
           <div className="card-header">
             <Bell size={16} color="var(--accent)" />
@@ -128,7 +248,7 @@ export default function Settings() {
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Enable native system notifications to receive alerts for impending milestones, overdue tasks, and critical risks even when PTT is minimized.
+              Enable native system notifications to receive alerts for impending milestones, overdue tasks, and critical risks.
             </p>
             <div className="flex gap-3 flex-wrap">
               {notifPermission !== 'granted' ? (
@@ -149,34 +269,12 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Database */}
-        <div className="card">
-          <div className="card-header"><Database size={16} color="var(--accent)" /><span className="section-title">Database Backup & Restore</span></div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Your data is stored locally in <strong>localStorage</strong> as a SQLite database. Export regularly to keep a backup.
-            </p>
-            <div className="flex gap-3 flex-wrap">
-              <button className="btn btn-secondary" onClick={saveDbNow}>
-                <Download size={14} /> Save Now
-              </button>
-              <button className="btn btn-secondary" onClick={exportDatabase}>
-                <Download size={14} /> Export Backup (.db)
-              </button>
-              <button className="btn btn-secondary" onClick={handleImport}>
-                <Upload size={14} /> Import Database (.db)
-              </button>
-            </div>
-            {importMsg && <div style={{ color: 'var(--success)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>{importMsg}</div>}
-          </div>
-        </div>
-
         {/* Data Export & Portability (Section 27) */}
         <div className="card">
           <div className="card-header"><Download size={16} color="var(--accent)" /><span className="section-title">Data Export & Portability</span></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Extract project data into open formats for reporting, spreadsheets, or archiving.
+              Extract active project data into open formats for reporting, spreadsheets, or archiving.
             </p>
             <div className="flex gap-3 flex-wrap">
               <button
@@ -239,7 +337,7 @@ export default function Settings() {
           <div className="card-header"><RefreshCw size={16} color="var(--accent)" /><span className="section-title">Demo Data</span></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Add the sample "Customer Portal Migration" project data to explore all features.
+              Add the sample "Customer Portal Migration" IT scenario to your current project.
             </p>
             <button className="btn btn-secondary" onClick={handleReseed} style={{ alignSelf: 'flex-start' }}>
               <RefreshCw size={14} /> Add Demo Data
@@ -250,18 +348,36 @@ export default function Settings() {
         {/* Danger zone */}
         <div className="card" style={{ borderColor: 'var(--danger-border)' }}>
           <div className="card-header"><Trash2 size={16} color="var(--danger)" /><span className="section-title" style={{ color: 'var(--danger)' }}>Danger Zone</span></div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Permanently delete all project data from localStorage and reset the application to a blank state.
-            </p>
-            <button
-              className={`btn btn-danger`}
-              onClick={handleReset}
-              style={{ alignSelf: 'flex-start' }}
-            >
-              <Trash2 size={14} /> {resetConfirm ? 'Click again to confirm RESET' : 'Reset All Data'}
-            </button>
-            {resetConfirm && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>⚠️ This will permanently delete all data. Export a backup first!</p>}
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Reset Active Project</h4>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 2 }}>
+                Clears all tasks, RAID items, and notes from the active project. Other projects in your workspace remain safe.
+              </p>
+              <button
+                className="btn btn-secondary mt-2"
+                onClick={handleResetCurrentProject}
+                style={{ color: 'var(--danger)', borderColor: 'var(--danger-border)' }}
+              >
+                <Trash2 size={13} /> {resetConfirmProject ? 'Click again to confirm project reset' : 'Reset Active Project'}
+              </button>
+            </div>
+
+            <hr style={{ borderColor: 'var(--border-subtle)', margin: '4px 0' }} />
+
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>Reset Entire Workspace</h4>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 2 }}>
+                Permanently deletes <strong>all projects</strong> from browser storage. Make sure you have exported a workspace backup first.
+              </p>
+              <button
+                className="btn btn-danger mt-2"
+                onClick={handleResetAllWorkspace}
+              >
+                <Trash2 size={14} /> {resetConfirmAll ? 'Click again to confirm FULL WORKSPACE RESET' : 'Reset All Workspace Data'}
+              </button>
+              {resetConfirmAll && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)', marginTop: 4 }}>⚠️ This will permanently delete all projects from IndexedDB.</p>}
+            </div>
           </div>
         </div>
 
@@ -270,12 +386,12 @@ export default function Settings() {
           <div className="card-header"><span className="section-title">About</span></div>
           <div className="card-body">
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-              <strong>Project Tracking Tool</strong> — Local-first IT project management workspace.<br />
-              Built with React + TypeScript + sql.js (SQLite WASM).<br />
-              All data stays on your machine. No cloud. No account. No dependencies.
+              <strong>Project Tracking Tool (PTT)</strong> — Local-first IT project management workspace.<br />
+              Deployable directly on Vercel or any static host. No server dependencies, no login required.<br />
+              All data stays on your machine using in-browser SQLite WASM + IndexedDB persistence.
             </p>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 8 }}>
-              Keyboard shortcuts: <code>Ctrl+K</code> Quick Capture · <code>Ctrl+/</code> Search
+              Keyboard shortcuts: <code>Alt+P</code> Project Switcher · <code>Ctrl+K</code> Quick Capture · <code>Ctrl+/</code> Search
             </p>
           </div>
         </div>

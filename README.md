@@ -70,44 +70,52 @@ Because PTT runs entirely client-side using WebAssembly-compiled SQLite (`sql.js
 
 ---
 
-## Create a New Project
+## Vercel & Web Deployment (Company Computers / No .exe)
 
-PTT is designed as a **reusable project template**. Each project has its own independent workspace:
+PTT is designed to run completely inside your browser as a **static WebAssembly Single Page Application**. You do **not** need an `.exe` file or a Google Drive synced folder to manage multiple projects.
 
-```text
-/projects/
-    Project-Alpha/
-        ptt/          <-- Application instance for Project Alpha
-    Project-Beta/
-        ptt/          <-- Application instance for Project Beta
-```
+### Deploy to Vercel:
+1. Push this repository to GitHub or GitLab.
+2. In [Vercel](https://vercel.com), click **Add New...** > **Project** and select your repository.
+3. Vercel automatically detects **Vite**:
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. Click **Deploy**.
 
-To create a new project:
-
-1. Duplicate or copy the `PTT` directory to your new project folder (e.g., `projects/Project-Beta/`).
-2. Run `npm install` (or share the `node_modules` cache).
-3. Start the application with `npm run dev`.
-4. Navigate to **Settings** (`/settings`):
-   - In the **Danger Zone**, click **Reset All Data** to clear the demo data and start with a clean slate.
-5. Go to **Project Overview** (`/overview`) and enter your project's name, code, sponsor, objectives, and parameters.
+Once deployed, your private URL (e.g. `https://my-ptt.vercel.app`) works on any computer, including locked-down enterprise laptops without admin privileges or `.exe` execution rights.
 
 ---
 
-## Backup
+## Multi-Project Workspace
 
-All application data is managed locally in an in-browser SQLite database and persisted automatically to your browser's local storage after every write.
+You can now manage **multiple independent projects** directly in the browser without duplicating folders:
 
-To create backups:
+1. **Quick Switcher (`Alt+P`)**:
+   - Press `Alt+P` (or `Ctrl+Shift+P`) from any screen, or click the project name in the top bar / sidebar.
+   - Search by project name, code, or manager, and press `Enter` to switch instantly.
+2. **Projects Hub (`/projects`)**:
+   - View all your projects with key KPIs (open tasks, overdue items, blockers, critical risks, milestones progress).
+   - Create new projects (Blank, Clone active project, or Demo scenario).
+   - Edit project names, codes, and custom color tags.
+   - Duplicate or delete projects.
+3. **Storage & Privacy**:
+   - Every project runs in an isolated, high-performance SQLite WASM instance.
+   - Automatically persisted to the browser's **IndexedDB** on every edit.
+   - Your data stays strictly on your computer and is never sent to any external server or cloud.
 
-1. **SQLite Database Backup (`.db` file)**:
-   - Navigate to **Settings** (`/settings`).
-   - Under **Database Backup & Restore**, click **Export Backup (.db)**.
-   - This downloads a standard, portable SQLite binary database file (`project-backup-YYYY-MM-DD.db`).
-2. **Full JSON Export**:
-   - Under **Data Export & Portability**, click **Export All (JSON)**.
-   - This exports all entities (tasks, milestones, risks, issues, decisions, actions, communications, stakeholders, resources) into a structured JSON file.
-3. **CSV Export**:
-   - Click **Export Tasks (CSV)** or **Export RAID Log (CSV)** for spreadsheet compatibility (Excel / Google Sheets).
+---
+
+## Backup & Portability
+
+- **Single Project Export (`.ptt`)**:
+  - Export any project as an open SQLite database (`.ptt` / `.db`).
+  - Import it back on any other machine or browser.
+- **Full Workspace Bundle (`.pttw`)**:
+  - In **Projects Hub** or **Settings**, click **Backup All (.pttw)** to export every project in your workspace into a single JSON file.
+  - Click **Restore Bundle** to restore all projects at once.
+- **CSV & JSON Exports**:
+  - Export Tasks, RAID Logs, and Audit Trails to CSV for Excel / Google Sheets compatibility.
 
 ---
 
