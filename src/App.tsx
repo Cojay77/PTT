@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { initDatabase, isFreshWorkspace } from './db';
-import {
-  hasDemoData, seedDemoData, seedWeeklyReviewsIfEmpty, seedBudgetIfEmpty,
-  seedChangeRequestsIfEmpty, seedStakeholderAbsencesIfEmpty, seedPortfolioIfEmpty
-} from './data/demoData';
+import { initDatabase } from './db';
 import { useTaskStore } from './store/useTaskStore';
 import { useDataStore } from './store/useDataStore';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
@@ -48,17 +44,6 @@ export default function App() {
   useEffect(() => {
     initDatabase()
       .then(() => {
-        // Only auto-seed demo data if it's the very first time the app is launched on an empty workspace
-        if (isFreshWorkspace() && !hasDemoData()) {
-          seedDemoData();
-          seedWeeklyReviewsIfEmpty();
-          seedBudgetIfEmpty();
-          seedChangeRequestsIfEmpty();
-          seedStakeholderAbsencesIfEmpty();
-          seedPortfolioIfEmpty();
-        } else {
-          seedPortfolioIfEmpty();
-        }
         loadTasks();
         loadAll();
         void refreshWorkspace();

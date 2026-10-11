@@ -337,7 +337,7 @@ export default function Settings() {
           <div className="card-header"><RefreshCw size={16} color="var(--accent)" /><span className="section-title">Demo Data</span></div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              Add the sample "Customer Portal Migration" IT scenario to your current project.
+              Optionally load sample project data to test or explore features in the active project.
             </p>
             <button className="btn btn-secondary" onClick={handleReseed} style={{ alignSelf: 'flex-start' }}>
               <RefreshCw size={14} /> Add Demo Data

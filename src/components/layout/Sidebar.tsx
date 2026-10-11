@@ -158,8 +158,8 @@ export default function Sidebar() {
     return map;
   }, [tasks, risks, issues, decisions, actions, communications, milestones, changeRequests, today]);
 
-  const projectName = projectConfig?.name || 'Customer Portal Migration';
-  const projectCode = projectConfig?.code || 'CPM-2026';
+  const projectName = projectConfig?.name || 'My Project';
+  const projectCode = projectConfig?.code || '';
 
   function getBadge(badgeKey?: string): BadgeInfo | null {
     if (!badgeKey) return null;

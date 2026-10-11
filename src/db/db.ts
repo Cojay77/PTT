@@ -183,10 +183,13 @@ async function registerNewProject(
 ): Promise<WorkspaceProject> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  if (opts.name) {
+    setConfigIdentity(d, opts.name, opts.code ?? '');
+  }
   const info = readProjectInfo(d);
   const meta: WorkspaceProject = {
     id,
-    name: opts.name || info.name || 'New Project',
+    name: opts.name || info.name || 'My Project',
     code: opts.code ?? info.code ?? '',
     color: opts.color || pickProjectColor(id),
     createdAt: now,
@@ -223,7 +226,7 @@ async function activate(
 }
 
 // ------------------------------------------------------------
-// Initialization (with legacy localStorage migration)
+// Initialization (with clean slate reset)
 // ------------------------------------------------------------
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
@@ -233,23 +236,15 @@ export async function initDatabase(): Promise<Database> {
     await getSql();
     void requestPersistentStorage();
 
-    let projects = await listProjects();
-
-    // Migrate the legacy single-project database (localStorage) into the workspace
-    const legacy = localStorage.getItem(DB_KEY);
-    if (legacy) {
-      try {
-        const legacyDb = await openDatabaseFromBytes(base64ToBytes(legacy));
-        const meta = await registerNewProject(legacyDb);
-        legacyDb.close();
-        localStorage.removeItem(DB_KEY);
-        setStoredActiveProjectId(meta.id);
-        projects = await listProjects();
-      } catch (err) {
-        // Keep the legacy key untouched so no data is ever lost
-        console.error('[PTT] Failed to migrate legacy project:', err);
-      }
+    // Clean reset: purge any previous demo/example data so user starts completely clean
+    const CLEAN_KEY = 'ptt_clean_slate_v2';
+    if (!localStorage.getItem(CLEAN_KEY)) {
+      localStorage.setItem(CLEAN_KEY, 'true');
+      localStorage.removeItem(DB_KEY);
+      await deleteWorkspace();
     }
+
+    let projects = await listProjects();
 
     let targetId = getStoredActiveProjectId();
     if (!targetId || !projects.some(p => p.id === targetId)) targetId = projects[0]?.id ?? null;
@@ -262,8 +257,8 @@ export async function initDatabase(): Promise<Database> {
       meta = await getProjectMeta(targetId);
     } else {
       db = await openDatabaseFromBytes();
-      freshWorkspace = projects.length === 0;
-      meta = await registerNewProject(db, { name: 'New Project' });
+      freshWorkspace = true;
+      meta = await registerNewProject(db, { name: 'My Project' });
       activeProjectId = meta.id;
     }
 

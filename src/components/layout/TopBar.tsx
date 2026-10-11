@@ -162,9 +162,9 @@ export default function TopBar() {
   const projectName = useMemo(() => {
     try {
       const cfg = projectConfigQueries.get();
-      return cfg?.name || 'Customer Portal Migration';
+      return cfg?.name || 'My Project';
     } catch {
-      return 'Customer Portal Migration';
+      return 'My Project';
     }
   }, [currentFilePath, location.pathname]);
 

@@ -52,7 +52,7 @@ export default function NewProjectDialog() {
         seedStakeholderAbsencesIfEmpty();
         seedPortfolioIfEmpty();
         // Keep the name the user chose
-        projectConfigQueries.upsert({ name: finalName, code: code.trim() || 'CPM-2026' });
+        projectConfigQueries.upsert({ name: finalName, code: code.trim() });
         await saveDbNow();
         loadTasks();
         loadAll();
