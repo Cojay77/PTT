@@ -124,11 +124,11 @@ export default function Sidebar() {
       (a) => a.dueDate && a.dueDate < today && !['done', 'cancelled'].includes(a.status)
     ).length;
 
-    // Overdue communication responses or follow-ups
-    const overdueComms = communications.filter(
+    // Active communications (awaiting response, follow-up needed, or active/open)
+    const activeComms = communications.filter(
       (c) =>
-        (c.status === 'awaiting-response' && c.expectedResponseDate && c.expectedResponseDate < today) ||
-        (c.followUpRequired && !['closed', 'response-received'].includes(c.status) && c.nextFollowUpDate && c.nextFollowUpDate < today)
+        !['closed', 'response-received'].includes(c.status) ||
+        (c.followUpRequired && c.status !== 'closed')
     ).length;
 
     // Delayed or at-risk milestones
@@ -148,9 +148,9 @@ export default function Sidebar() {
     if (tasksCount > 0) map.tasks = { count: tasksCount, level: 'danger' };
     if (openRisks > 0) map.risks = { count: openRisks, level: 'danger' };
     if (openIssues > 0) map.issues = { count: openIssues, level: 'danger' };
-    if (pendingDecisions > 0) map.decisions = { count: pendingDecisions, level: 'warning' };
+    if (pendingDecisions > 0) map.decisions = { count: pendingDecisions, level: 'danger' };
     if (overdueActions > 0) map.actions = { count: overdueActions, level: 'warning' };
-    if (overdueComms > 0) map.comms = { count: overdueComms, level: 'warning' };
+    if (activeComms > 0) map.comms = { count: activeComms, level: 'danger' };
     if (delayedMilestones > 0) map.milestones = { count: delayedMilestones, level: 'warning' };
     if (raidAlerts > 0) map.raid = { count: raidAlerts, level: 'danger' };
     if (openChangeRequests > 0) map.changeRequests = { count: openChangeRequests, level: 'warning' };
