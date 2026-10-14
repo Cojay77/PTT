@@ -127,8 +127,9 @@ export default function Timeline() {
             {/* Milestone rows */}
             {sorted.map(m => {
               const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
+              const isCompleted = m.status === 'completed';
               const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), today) : null;
-              const isLate = m.targetDate && m.targetDate < todayStr && m.status !== 'completed';
+              const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted;
               const isExpanded = showTaskLanes || expandedMilestones.has(m.id);
 
               return (
@@ -187,9 +188,14 @@ export default function Timeline() {
 
                       {/* Date label */}
                       {m.targetDate && (
-                        <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: isLate ? 'var(--danger)' : 'var(--text-muted)', fontWeight: daysLeft !== null && Math.abs(daysLeft) <= 7 ? 700 : 400 }}>
+                        <div style={{
+                          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                          fontSize: 10,
+                          color: isCompleted ? 'var(--success)' : isLate ? 'var(--danger)' : 'var(--text-muted)',
+                          fontWeight: isCompleted || (daysLeft !== null && Math.abs(daysLeft) <= 7) ? 700 : 400
+                        }}>
                           {format(parseISO(m.targetDate), 'MMM d')}
-                          {daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
+                          {isCompleted ? ' (Completed)' : daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
                         </div>
                       )}
                     </div>
@@ -291,15 +297,25 @@ export default function Timeline() {
             <tbody>
               {sorted.map(m => {
                 const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
+                const isCompleted = m.status === 'completed';
                 const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), today) : null;
-                const isLate = m.targetDate && m.targetDate < todayStr && m.status !== 'completed';
+                const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted;
                 return (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 600 }}>{m.name}</td>
                     <td><MilestoneBadge status={isLate ? 'delayed' : m.status} /></td>
                     <td>{m.targetDate ? format(parseISO(m.targetDate), 'MMM d, yyyy') : '—'}</td>
-                    <td style={{ color: daysLeft !== null && daysLeft < 0 ? 'var(--danger)' : daysLeft !== null && daysLeft <= 14 ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                      {daysLeft === null ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`}
+                    <td style={{
+                      color: isCompleted
+                        ? 'var(--success)'
+                        : daysLeft !== null && daysLeft < 0
+                          ? 'var(--danger)'
+                          : daysLeft !== null && daysLeft <= 14
+                            ? 'var(--warning)'
+                            : 'var(--text-secondary)',
+                      fontWeight: 600
+                    }}>
+                      {isCompleted ? 'Completed' : daysLeft === null ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`}
                     </td>
                     <td style={{ minWidth: 150 }}><ProgressBar value={m.progress} /></td>
                     <td style={{ color: 'var(--text-secondary)' }}>{m.owner || '—'}</td>

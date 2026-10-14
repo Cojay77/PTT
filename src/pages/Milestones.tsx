@@ -33,13 +33,27 @@ function MilestoneModal({ milestone, onClose }: { milestone?: Partial<Milestone>
         </div>
         <div className="form-group">
           <label className="form-label">Status</label>
-          <select className="select" value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as MilestoneStatus }))}>
+          <select className="select" value={form.status} onChange={e => {
+            const nextStatus = e.target.value as MilestoneStatus;
+            setForm(p => ({
+              ...p,
+              status: nextStatus,
+              progress: nextStatus === 'completed' && (!p.progress || p.progress < 100) ? 100 : p.progress,
+            }));
+          }}>
             {(['planned', 'in-progress', 'completed', 'delayed', 'at-risk', 'cancelled'] as MilestoneStatus[]).map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}
           </select>
         </div>
         <div className="form-group">
           <label className="form-label">Progress (%)</label>
-          <input className="input" type="number" min="0" max="100" value={form.progress || 0} onChange={e => setForm(p => ({ ...p, progress: Number(e.target.value) }))} />
+          <input className="input" type="number" min="0" max="100" value={form.progress || 0} onChange={e => {
+            const val = Math.min(100, Math.max(0, Number(e.target.value)));
+            setForm(p => ({
+              ...p,
+              progress: val,
+              status: val === 100 && p.status !== 'completed' ? 'completed' : val < 100 && p.status === 'completed' ? 'in-progress' : p.status,
+            }));
+          }} />
         </div>
         <div className="form-group">
           <label className="form-label">Owner</label>
@@ -86,10 +100,11 @@ export default function Milestones() {
           {sorted.map(m => {
             const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
             const doneTasks = mTasks.filter(t => t.status === 'done').length;
+            const isCompleted = m.status === 'completed';
             const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), new Date()) : null;
-            const isDelayed = m.targetDate && m.targetDate < today && m.status !== 'completed';
+            const isDelayed = m.targetDate && m.targetDate < today && !isCompleted;
             return (
-              <div key={m.id} className="card" style={{ borderLeft: `4px solid ${m.status === 'completed' ? 'var(--success)' : m.status === 'delayed' || isDelayed ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)'}` }}>
+              <div key={m.id} className="card" style={{ borderLeft: `4px solid ${isCompleted ? 'var(--success)' : m.status === 'delayed' || isDelayed ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)'}` }}>
                 <div className="card-body">
                   <div className="flex items-center gap-3 mb-3">
                     <div style={{ flex: 1 }}>
@@ -100,8 +115,26 @@ export default function Milestones() {
                       {m.description && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 4 }}>{m.description}</p>}
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--text-xl)', color: daysLeft !== null && daysLeft < 0 ? 'var(--danger)' : daysLeft !== null && daysLeft <= 7 ? 'var(--warning)' : 'var(--text-primary)' }}>
-                        {daysLeft === null ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : daysLeft === 0 ? 'Today' : `${daysLeft}d left`}
+                      <div style={{
+                        fontWeight: 700,
+                        fontSize: 'var(--text-xl)',
+                        color: isCompleted
+                          ? 'var(--success)'
+                          : daysLeft !== null && daysLeft < 0
+                            ? 'var(--danger)'
+                            : daysLeft !== null && daysLeft <= 7
+                              ? 'var(--warning)'
+                              : 'var(--text-primary)'
+                      }}>
+                        {isCompleted
+                          ? 'Completed'
+                          : daysLeft === null
+                            ? '—'
+                            : daysLeft < 0
+                              ? `${Math.abs(daysLeft)}d late`
+                              : daysLeft === 0
+                                ? 'Today'
+                                : `${daysLeft}d left`}
                       </div>
                       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                         {m.targetDate ? format(parseISO(m.targetDate), 'MMM d, yyyy') : 'No date'}

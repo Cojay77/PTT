@@ -304,8 +304,9 @@ export default function Dashboard() {
                 </button>
               </div>
               {snap.upcomingMilestones.map(m => {
+                const isCompleted = m.status === 'completed';
                 const days = differenceInDays(parseISO(m.targetDate), new Date());
-                const urgencyColor = days <= 7 ? 'var(--danger)' : days <= 14 ? 'var(--warning)' : 'var(--text-muted)';
+                const urgencyColor = isCompleted ? 'var(--success)' : days <= 7 ? 'var(--danger)' : days <= 14 ? 'var(--warning)' : 'var(--text-muted)';
                 return (
                   <div key={m.id} style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)' }} onClick={() => navigate('/milestones')} className="cursor-pointer">
                     <div className="flex items-center gap-3">
@@ -315,7 +316,7 @@ export default function Dashboard() {
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontWeight: 700, color: urgencyColor, fontSize: 'var(--text-sm)' }}>
-                          {days === 0 ? 'Today' : days < 0 ? `${Math.abs(days)}d late` : `${days}d`}
+                          {isCompleted ? 'Completed' : days === 0 ? 'Today' : days < 0 ? `${Math.abs(days)}d late` : `${days}d`}
                         </div>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                           {format(parseISO(m.targetDate), 'MMM d')}
