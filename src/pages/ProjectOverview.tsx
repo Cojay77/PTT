@@ -3,6 +3,7 @@ import { Save, Edit3 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { projectConfigQueries } from '../db/queries';
 import { saveDbNow } from '../db';
+import { PersonSelect, PeopleMultiSelect } from '../components/ui/shared';
 
 const FIELDS = [
   { key: 'name', label: 'Project Name', required: true },
@@ -127,7 +128,19 @@ export default function ProjectOverview() {
                 return (
                   <div key={key} className="form-group">
                     <label className="form-label">{field.label}</label>
-                    {field.type === 'select' ? (
+                    {['owner', 'manager', 'sponsor'].includes(key) ? (
+                      <PersonSelect
+                        value={value}
+                        onChange={v => setForm(f => ({ ...f, [key]: v }))}
+                        placeholder={`Select ${field.label}...`}
+                      />
+                    ) : key === 'team' ? (
+                      <PeopleMultiSelect
+                        value={value}
+                        onChange={v => setForm(f => ({ ...f, [key]: v }))}
+                        placeholder="Select team members..."
+                      />
+                    ) : field.type === 'select' ? (
                       <select className="select" value={value} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}>
                         {field.options?.map(o => <option key={o} value={o}>{o.replace(/-/g, ' ')}</option>)}
                       </select>

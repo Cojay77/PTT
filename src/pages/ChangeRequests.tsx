@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
 import type { ChangeRequest } from '../types';
+import { PersonSelect } from '../components/ui/PersonSelect';
 import {
   PlusCircle, Pencil, Trash2, X, ChevronDown, ChevronUp, CheckCircle2,
   Clock, AlertCircle, XCircle, GitMerge, Send, Eye, Filter, CheckSquare,
@@ -467,11 +468,19 @@ export default function ChangeRequests() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Requestor</label>
-                    <input className="input" value={form.requestor || ''} onChange={e => setField('requestor', e.target.value)} placeholder="Name and role" />
+                    <PersonSelect
+                      value={form.requestor || ''}
+                      onChange={v => setField('requestor', v)}
+                      placeholder="Requestor (Resource or Stakeholder)..."
+                    />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Approver</label>
-                    <input className="input" value={form.approver || ''} onChange={e => setField('approver', e.target.value)} placeholder="Decision maker name" />
+                    <PersonSelect
+                      value={form.approver || ''}
+                      onChange={v => setField('approver', v)}
+                      placeholder="Approver (Resource or Stakeholder)..."
+                    />
                   </div>
                 </div>
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit3, Scale, CalendarCheck } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
-import { DecisionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { DecisionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect, PeopleMultiSelect } from '../components/ui/shared';
 import type { Decision, DecisionStatus } from '../types';
 
 const STATUSES: DecisionStatus[] = ['proposed', 'under-discussion', 'decision-required', 'approved', 'rejected', 'superseded'];
@@ -23,8 +23,22 @@ function DecisionModal({ decision, onClose }: { decision?: Partial<Decision>; on
       <div className="form-row">
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label required">Title</label><input className="input" value={form.title || ''} onChange={f('title')} autoFocus /></div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{STATUSES.map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>
-        <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
-        <div className="form-group"><label className="form-label">Contributors</label><input className="input" value={form.contributors || ''} onChange={f('contributors')} /></div>
+        <div className="form-group">
+          <label className="form-label">Owner</label>
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Decision owner..."
+          />
+        </div>
+        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+          <label className="form-label">Contributors / Consulted</label>
+          <PeopleMultiSelect
+            value={form.contributors || ''}
+            onChange={val => setForm(p => ({ ...p, contributors: val }))}
+            placeholder="Add contributors (Resources & Stakeholders)..."
+          />
+        </div>
         <div className="form-group"><label className="form-label">Deadline</label><input className="input" type="date" value={form.deadline || ''} onChange={f('deadline')} /></div>
         <div className="form-group"><label className="form-label">Decision Date</label><input className="input" type="date" value={form.decisionDate || ''} onChange={f('decisionDate')} /></div>
         <div className="form-group">

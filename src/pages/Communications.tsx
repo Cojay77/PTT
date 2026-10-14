@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Plus, Trash2, Edit3, Search } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
-import { CommBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { CommBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect, PeopleMultiSelect } from '../components/ui/shared';
 import type { Communication, CommunicationStatus } from '../types';
 import { MessageSquare } from 'lucide-react';
 
@@ -18,12 +18,7 @@ function CommModal({ comm, onClose }: { comm?: Partial<Communication>; onClose: 
   });
   const [subjectError, setSubjectError] = useState(false);
 
-  const knownContacts = useMemo(() => {
-    const set = new Set<string>();
-    stakeholders.forEach(s => { if (s.name) set.add(s.name); });
-    resources.forEach(r => { if (r.name) set.add(r.name); });
-    return Array.from(set).sort();
-  }, [stakeholders, resources]);
+
 
   const senderInRecipients = useMemo(() => {
     if (!form.sender?.trim() || !form.recipients?.trim()) return false;
@@ -50,9 +45,7 @@ function CommModal({ comm, onClose }: { comm?: Partial<Communication>; onClose: 
     <Modal title={isEdit ? 'Edit Communication' : 'New Communication'} onClose={onClose} size="lg"
       footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}
     >
-      <datalist id="comm-contacts-list">
-        {knownContacts.map(c => <option key={c} value={c} />)}
-      </datalist>
+
       <div className="form-row">
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label required">Subject</label>
@@ -67,10 +60,21 @@ function CommModal({ comm, onClose }: { comm?: Partial<Communication>; onClose: 
         </div>
         <div className="form-group"><label className="form-label">Type</label><select className="select" value={form.type} onChange={f('type')}>{COMM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Date</label><input className="input" type="date" value={form.date || ''} onChange={f('date')} /></div>
-        <div className="form-group"><label className="form-label">Sender</label><input className="input" list="comm-contacts-list" value={form.sender || ''} onChange={f('sender')} /></div>
+        <div className="form-group">
+          <label className="form-label">Sender</label>
+          <PersonSelect
+            value={form.sender || ''}
+            onChange={val => setForm(p => ({ ...p, sender: val }))}
+            placeholder="Sender (Resource or Stakeholder)..."
+          />
+        </div>
         <div className="form-group">
           <label className="form-label">Recipients</label>
-          <input className="input" list="comm-contacts-list" value={form.recipients || ''} onChange={f('recipients')} placeholder="Name, Name, ..." />
+          <PeopleMultiSelect
+            value={form.recipients || ''}
+            onChange={val => setForm(p => ({ ...p, recipients: val }))}
+            placeholder="Add recipients..."
+          />
           {senderInRecipients && (
             <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 4 }}>
               ⚠ Note: Sender "{form.sender}" is also listed as a recipient.

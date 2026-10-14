@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit3, Flame } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
-import { SeverityBadge, IssueBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { SeverityBadge, IssueBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect } from '../components/ui/shared';
 import type { Issue, Severity, IssueStatus } from '../types';
 
 function IssueModal({ issue, onClose }: { issue?: Partial<Issue>; onClose: () => void }) {
@@ -19,7 +19,14 @@ function IssueModal({ issue, onClose }: { issue?: Partial<Issue>; onClose: () =>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label required">Title</label><input className="input" value={form.title || ''} onChange={f('title')} autoFocus /></div>
         <div className="form-group"><label className="form-label">Severity</label><select className="select" value={form.severity} onChange={f('severity')}>{(['critical', 'high', 'medium', 'low'] as Severity[]).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{(['open', 'in-progress', 'resolved', 'escalated', 'closed'] as IssueStatus[]).map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>
-        <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
+        <div className="form-group">
+          <label className="form-label">Owner</label>
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Assignee (Resource or Stakeholder)..."
+          />
+        </div>
         <div className="form-group"><label className="form-label">Detected Date</label><input className="input" type="date" value={form.detectedDate || ''} onChange={f('detectedDate')} /></div>
         <div className="form-group"><label className="form-label">Resolution Target</label><input className="input" type="date" value={form.resolutionTarget || ''} onChange={f('resolutionTarget')} /></div>
         <div className="form-group"><label className="form-label">Escalation Status</label><input className="input" value={form.escalationStatus || ''} onChange={f('escalationStatus')} /></div>

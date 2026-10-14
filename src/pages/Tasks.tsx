@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { Plus, Filter, Search, Trash2, Edit3, ChevronUp, ChevronDown, Upload, Download, FileText, Check } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
-import { StatusBadge, PriorityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, ProgressBar } from '../components/ui/shared';
+import { StatusBadge, PriorityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, ProgressBar, PersonSelect, PeopleMultiSelect } from '../components/ui/shared';
 import type { Task, TaskStatus, Priority } from '../types';
 import { exportTasksToCsv, downloadTaskTemplateCsv, parseCsv } from '../utils/export';
 
@@ -22,12 +22,7 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
   });
   const [titleError, setTitleError] = useState(false);
 
-  const knownOwners = useMemo(() => {
-    const set = new Set<string>();
-    resources.forEach(r => { if (r.name) set.add(r.name); });
-    stakeholders.forEach(s => { if (s.name) set.add(s.name); });
-    return Array.from(set).sort();
-  }, [resources, stakeholders]);
+
 
   function save() {
     if (!form.title?.trim()) { setTitleError(true); return; }
@@ -47,9 +42,7 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
         <button className="btn btn-primary" onClick={save}>Save Task</button>
       </>}
     >
-      <datalist id="task-owners-list">
-        {knownOwners.map(name => <option key={name} value={name} />)}
-      </datalist>
+
       <div className="form-row" style={{ marginBottom: 16 }}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label required">Title</label>
@@ -77,11 +70,19 @@ function TaskModal({ task, onClose }: { task?: Partial<Task>; onClose: () => voi
         </div>
         <div className="form-group">
           <label className="form-label">Owner</label>
-          <input className="input" list="task-owners-list" placeholder="Assignee name..." value={form.owner || ''} onChange={f('owner')} />
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Assignee (Resource or Stakeholder)..."
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Contributors</label>
-          <input className="input" list="task-owners-list" placeholder="Contributors..." value={form.contributors || ''} onChange={f('contributors')} />
+          <PeopleMultiSelect
+            value={form.contributors || ''}
+            onChange={val => setForm(p => ({ ...p, contributors: val }))}
+            placeholder="Add contributors..."
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Start Date</label>

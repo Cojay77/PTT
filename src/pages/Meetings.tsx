@@ -2,13 +2,14 @@ import { useState, useMemo } from 'react';
 import {
   Plus, Trash2, Edit3, CalendarCheck, CheckSquare, Square,
   Scale, Zap, ListTodo, Link2, X, ChevronDown, ChevronUp,
-  Search, Calendar, User, Clock, CheckCircle2, AlertCircle
+  Search, Calendar, User, Users, Clock, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
 import {
   Modal, ConfirmDialog, EmptyState,
-  ActionBadge, DecisionBadge, StatusBadge, PriorityBadge, DateDisplay
+  ActionBadge, DecisionBadge, StatusBadge, PriorityBadge, DateDisplay,
+  PersonSelect, PeopleMultiSelect, usePeople, Avatar
 } from '../components/ui/shared';
 import type { Meeting, Action, Task, Decision, ActionStatus, TaskStatus, DecisionStatus, Priority } from '../types';
 import { format, parseISO, addWeeks, addMonths } from 'date-fns';
@@ -149,6 +150,8 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
   const [selectedActionToLink, setSelectedActionToLink] = useState('');
   const [selectedTaskToLink, setSelectedTaskToLink] = useState('');
   const [selectedDecisionToLink, setSelectedDecisionToLink] = useState('');
+  const [selectedPersonToLink, setSelectedPersonToLink] = useState('');
+  const { people, resources, stakeholders } = usePeople();
 
   // Inline Quick Add states
   const [isAddingAction, setIsAddingAction] = useState(false);
@@ -328,7 +331,27 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
   const f = (k: keyof Meeting) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
-  const totalLinkedCount = linkedActionIds.length + linkedTaskIds.length + linkedDecisionIds.length;
+  const participantsList = useMemo(() => {
+    if (!form.participants?.trim()) return [];
+    return form.participants.split(',').map(s => s.trim()).filter(Boolean);
+  }, [form.participants]);
+
+  function handleAddExistingPerson() {
+    if (!selectedPersonToLink) return;
+    const existing = participantsList.map(s => s.toLowerCase());
+    if (!existing.includes(selectedPersonToLink.toLowerCase())) {
+      const next = [...participantsList, selectedPersonToLink].join(', ');
+      setForm(p => ({ ...p, participants: next }));
+    }
+    setSelectedPersonToLink('');
+  }
+
+  function handleRemovePerson(name: string) {
+    const next = participantsList.filter(s => s.toLowerCase() !== name.toLowerCase()).join(', ');
+    setForm(p => ({ ...p, participants: next }));
+  }
+
+  const totalLinkedCount = linkedActionIds.length + linkedTaskIds.length + linkedDecisionIds.length + participantsList.length;
 
   return (
     <Modal
@@ -440,13 +463,12 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
                 ))}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Participants</label>
-              <input
-                className="input"
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Participants (Team & Stakeholders)</label>
+              <PeopleMultiSelect
                 value={form.participants || ''}
-                onChange={f('participants')}
-                placeholder="Jean-Baptiste, Sophie, Karim..."
+                onChange={val => setForm(p => ({ ...p, participants: val }))}
+                placeholder="Select attendees from Resources & Stakeholders, or type name..."
               />
             </div>
           </div>
@@ -637,6 +659,122 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
 
       {activeTab === 'links' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* SECTION 0: PARTICIPANTS (RESOURCES & STAKEHOLDERS) */}
+          <div className="card" style={{ padding: 16, background: 'var(--bg-surface)' }}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Users size={16} color="var(--accent)" />
+                <span style={{ fontWeight: 700, fontSize: 13 }}>
+                  Linked Participants ({participantsList.length})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {resources.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => {
+                      const allRes = resources.map(r => r.name).filter(Boolean);
+                      const combined = Array.from(new Set([...participantsList, ...allRes])).join(', ');
+                      setForm(p => ({ ...p, participants: combined }));
+                    }}
+                    style={{ fontSize: 11 }}
+                  >
+                    + All Resources
+                  </button>
+                )}
+                {stakeholders.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => {
+                      const allStk = stakeholders.map(s => s.name).filter(Boolean);
+                      const combined = Array.from(new Set([...participantsList, ...allStk])).join(', ');
+                      setForm(p => ({ ...p, participants: combined }));
+                    }}
+                    style={{ fontSize: 11 }}
+                  >
+                    + All Stakeholders
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Link Existing Resource or Stakeholder Selector */}
+            <div className="flex items-center gap-2 mb-3">
+              <select
+                className="select"
+                value={selectedPersonToLink}
+                onChange={e => setSelectedPersonToLink(e.target.value)}
+                style={{ fontSize: 12, height: 32, flex: 1 }}
+              >
+                <option value="">Link person from Resources & Stakeholders...</option>
+                {people
+                  .filter(p => !participantsList.some(s => s.toLowerCase() === p.name.toLowerCase()))
+                  .map(p => (
+                    <option key={p.id} value={p.name}>
+                      [{p.type === 'resource' ? 'Resource' : 'Stakeholder'}] {p.name} {p.role ? `— ${p.role}` : ''} {p.organization ? `(${p.organization})` : ''}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleAddExistingPerson}
+                disabled={!selectedPersonToLink}
+              >
+                <Link2 size={12} /> Link
+              </button>
+            </div>
+
+            {/* Linked Participants List */}
+            {participantsList.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '6px 0' }}>
+                No participants linked yet. Select resources or stakeholders above.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+                {participantsList.map(name => {
+                  const match = people.find(p => p.name.toLowerCase() === name.toLowerCase());
+                  return (
+                    <div
+                      key={name}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: 12,
+                      }}
+                    >
+                      <div className="flex items-center gap-2" style={{ minWidth: 0, flex: 1 }}>
+                        <Avatar name={name} size={22} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 600 }} className="truncate">{name}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }} className="truncate">
+                            {match ? `${match.type === 'resource' ? 'Resource' : 'Stakeholder'} ${match.role ? `· ${match.role}` : ''}` : 'Participant'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-icon btn-ghost btn-sm"
+                        title="Unlink participant"
+                        onClick={() => handleRemovePerson(name)}
+                        style={{ color: 'var(--text-muted)', marginLeft: 6 }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* SECTION 1: ACTIONS */}
           <div className="card" style={{ padding: 16, background: 'var(--bg-surface)' }}>
             <div className="flex items-center justify-between gap-3 mb-3">
@@ -678,12 +816,10 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
                   style={{ fontSize: 12 }}
                 />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <input
-                    className="input"
-                    placeholder="Owner (name)..."
+                  <PersonSelect
+                    placeholder="Owner (Resource or Stakeholder)..."
                     value={newActionOwner}
-                    onChange={e => setNewActionOwner(e.target.value)}
-                    style={{ fontSize: 12 }}
+                    onChange={setNewActionOwner}
                   />
                   <input
                     className="input"
@@ -837,12 +973,10 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
                   style={{ fontSize: 12 }}
                 />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                  <input
-                    className="input"
-                    placeholder="Owner (name)..."
+                  <PersonSelect
+                    placeholder="Owner (Resource or Stakeholder)..."
                     value={newTaskOwner}
-                    onChange={e => setNewTaskOwner(e.target.value)}
-                    style={{ fontSize: 12 }}
+                    onChange={setNewTaskOwner}
                   />
                   <input
                     className="input"
@@ -1002,12 +1136,10 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
                   style={{ fontSize: 12 }}
                 />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                  <input
-                    className="input"
-                    placeholder="Owner (name)..."
+                  <PersonSelect
+                    placeholder="Owner (Resource or Stakeholder)..."
                     value={newDecisionOwner}
-                    onChange={e => setNewDecisionOwner(e.target.value)}
-                    style={{ fontSize: 12 }}
+                    onChange={setNewDecisionOwner}
                   />
                   <input
                     className="input"

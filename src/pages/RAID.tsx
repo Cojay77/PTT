@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Zap, Scale, ArrowRight, Plus, Check } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
-import { SeverityBadge, IssueBadge, DecisionBadge, ActionBadge, StatusBadge, DateDisplay, Modal } from '../components/ui/shared';
+import { SeverityBadge, IssueBadge, DecisionBadge, ActionBadge, StatusBadge, DateDisplay, Modal, PersonSelect } from '../components/ui/shared';
 import type { Risk, Action, Issue, Decision, ActionStatus, Severity, IssueStatus, DecisionStatus } from '../types';
 
 export default function RAID() {
@@ -303,11 +303,10 @@ export default function RAID() {
 
             <div className="form-group">
               <label className="form-label">Owner</label>
-              <input
-                className="input"
+              <PersonSelect
                 value={form.owner || ''}
-                onChange={e => setForm(p => ({ ...p, owner: e.target.value }))}
-                placeholder="Assignee name..."
+                onChange={val => setForm(p => ({ ...p, owner: val }))}
+                placeholder="Assignee (Resource or Stakeholder)..."
               />
             </div>
 

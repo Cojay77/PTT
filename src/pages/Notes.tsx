@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import {
   Plus, Trash2, Edit3, Star, BookOpen, Search, X, Check, Copy, Download,
   Eye, Code2, Bold, Italic, Heading2, List, CheckSquare, Table, Quote,
-  Columns, LayoutGrid, Calendar, Tag, ArrowLeft, Link2, Scale, AlertTriangle, CalendarCheck,
+  Columns, LayoutGrid, Calendar, Tag, ArrowLeft, Link2, Scale, AlertTriangle, CalendarCheck, UserCog, Users
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
@@ -31,7 +31,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
 
 export default function Notes() {
   const navigate = useNavigate();
-  const { notes, deleteNote, updateNote, createNote, decisions, risks, meetings } = useDataStore();
+  const { notes, deleteNote, updateNote, createNote, decisions, risks, meetings, resources, stakeholders } = useDataStore();
   const { tasks } = useTaskStore();
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function Notes() {
     if (!activeNote) return [];
     const noteTitleLower = activeNote.title.toLowerCase();
     const contentLower = (activeNote.content || '').toLowerCase();
-    const refs: Array<{ type: 'task' | 'decision' | 'risk' | 'meeting'; id: string; title: string; subtitle: string; path: string }> = [];
+    const refs: Array<{ type: 'task' | 'decision' | 'risk' | 'meeting' | 'resource' | 'stakeholder'; id: string; title: string; subtitle: string; path: string }> = [];
 
     // Check Tasks
     tasks.forEach(t => {
@@ -124,6 +124,20 @@ export default function Notes() {
       const matchInMeeting = (m.agenda?.toLowerCase().includes(noteTitleLower) || m.notes?.toLowerCase().includes(noteTitleLower));
       if (matchInNote || matchInMeeting) {
         refs.push({ type: 'meeting', id: m.id, title: m.title, subtitle: `Meeting · ${m.date}`, path: '/meetings' });
+      }
+    });
+
+    // Check Resources
+    resources.forEach(r => {
+      if (r.name && contentLower.includes(r.name.toLowerCase())) {
+        refs.push({ type: 'resource', id: r.id, title: r.name, subtitle: `Team Resource · ${r.role || 'Member'}`, path: '/resources' });
+      }
+    });
+
+    // Check Stakeholders
+    stakeholders.forEach(s => {
+      if (s.name && contentLower.includes(s.name.toLowerCase())) {
+        refs.push({ type: 'stakeholder', id: s.id, title: s.name, subtitle: `Stakeholder · ${s.role || s.organization || 'Contact'}`, path: '/stakeholders' });
       }
     });
 
@@ -847,7 +861,7 @@ export default function Notes() {
                       {linkedReferences.length > 0 ? (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
                           {linkedReferences.map((ref) => {
-                            const Icon = ref.type === 'task' ? CheckSquare : ref.type === 'decision' ? Scale : ref.type === 'risk' ? AlertTriangle : CalendarCheck;
+                            const Icon = ref.type === 'task' ? CheckSquare : ref.type === 'decision' ? Scale : ref.type === 'risk' ? AlertTriangle : ref.type === 'meeting' ? CalendarCheck : ref.type === 'resource' ? UserCog : Users;
                             const color = ref.type === 'task' ? 'var(--accent)' : ref.type === 'decision' ? 'var(--purple)' : ref.type === 'risk' ? 'var(--warning)' : 'var(--teal)';
                             return (
                               <div

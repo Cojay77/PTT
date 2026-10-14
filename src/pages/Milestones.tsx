@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Edit3, Target } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
-import { MilestoneBadge, ProgressBar, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { MilestoneBadge, ProgressBar, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect } from '../components/ui/shared';
 import type { Milestone, MilestoneStatus } from '../types';
 import { format, parseISO, differenceInDays } from 'date-fns';
 
@@ -57,7 +57,11 @@ function MilestoneModal({ milestone, onClose }: { milestone?: Partial<Milestone>
         </div>
         <div className="form-group">
           <label className="form-label">Owner</label>
-          <input className="input" value={form.owner || ''} onChange={e => setForm(p => ({ ...p, owner: e.target.value }))} />
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Milestone lead (Resource or Stakeholder)..."
+          />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label">Description</label>

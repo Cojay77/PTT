@@ -234,3 +234,5 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: {
 // Needed for useEffect in Modal
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+
+export { PersonSelect, PeopleMultiSelect, usePeople } from './PersonSelect';

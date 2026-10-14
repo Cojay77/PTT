@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit3 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
-import { SeverityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { SeverityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect } from '../components/ui/shared';
 import type { Risk, Severity, RiskStatus, Probability, Impact } from '../types';
 import { AlertTriangle } from 'lucide-react';
 
@@ -40,7 +40,14 @@ function RiskModal({ risk, onClose }: { risk?: Partial<Risk>; onClose: () => voi
       <div className="form-row">
         <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label required">Title</label><input className="input" value={form.title || ''} onChange={f('title')} autoFocus /></div>
         <div className="form-group"><label className="form-label">Category</label><select className="select" value={form.category} onChange={f('category')}><option value="">Select...</option>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
+        <div className="form-group">
+          <label className="form-label">Owner</label>
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Risk owner (Resource or Stakeholder)..."
+          />
+        </div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{(['identified', 'analysed', 'mitigated', 'accepted', 'closed'] as RiskStatus[]).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Target Resolution</label><input className="input" type="date" value={form.targetResolutionDate || ''} onChange={f('targetResolutionDate')} /></div>
         <div className="form-group">

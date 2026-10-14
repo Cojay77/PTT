@@ -4,6 +4,7 @@ import { X, CheckSquare, StickyNote, AlertTriangle, Zap, Scale, MessageSquare, C
 import { useUIStore } from '../../store/useUIStore';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useDataStore } from '../../store/useDataStore';
+import { PersonSelect } from './PersonSelect';
 import type { QuickCaptureType } from '../../types';
 
 const TYPES: Array<{ type: QuickCaptureType; icon: React.ElementType; label: string; color: string }> = [
@@ -112,13 +113,13 @@ export default function QuickCapture() {
         {/* Optional fields */}
         {['task', 'action', 'risk', 'issue', 'decision'].includes(selectedType) && (
           <div style={{ padding: '8px 20px', display: 'flex', gap: 12, borderBottom: '1px solid var(--border)' }}>
-            <input
-              className="input"
-              style={{ flex: 1 }}
-              placeholder="Owner"
-              value={owner}
-              onChange={e => setOwner(e.target.value)}
-            />
+            <div style={{ flex: 1 }}>
+              <PersonSelect
+                placeholder="Owner (Resource or Stakeholder)..."
+                value={owner}
+                onChange={setOwner}
+              />
+            </div>
             <input
               className="input"
               type="date"

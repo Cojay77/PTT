@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit3, Zap, CalendarCheck } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
-import { ActionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState } from '../components/ui/shared';
+import { ActionBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, PersonSelect } from '../components/ui/shared';
 import type { Action, ActionStatus } from '../types';
 
 function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: () => void }) {
@@ -32,7 +32,14 @@ function ActionModal({ action, onClose }: { action?: Partial<Action>; onClose: (
         />
         {actionError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4, fontWeight: 500 }}>⚠ Action description is required</div>}
       </div>
-        <div className="form-group"><label className="form-label">Owner</label><input className="input" value={form.owner || ''} onChange={f('owner')} /></div>
+        <div className="form-group">
+          <label className="form-label">Owner</label>
+          <PersonSelect
+            value={form.owner || ''}
+            onChange={val => setForm(p => ({ ...p, owner: val }))}
+            placeholder="Assignee (Resource or Stakeholder)..."
+          />
+        </div>
         <div className="form-group"><label className="form-label">Due Date</label><input className="input" type="date" value={form.dueDate || ''} onChange={f('dueDate')} /></div>
         <div className="form-group"><label className="form-label">Status</label><select className="select" value={form.status} onChange={f('status')}>{(['open', 'in-progress', 'done', 'cancelled'] as ActionStatus[]).map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}</select></div>
         <div className="form-group">
