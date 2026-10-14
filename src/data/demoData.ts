@@ -40,8 +40,8 @@ export function seedDemoData(): void {
   });
 
   // Milestones
-  const m1 = milestoneQueries.create({ name: 'Phase 1 — Architecture & Design', description: 'Technical architecture finalized, UX wireframes approved, dev environment ready.', targetDate: '2026-05-31', status: 'completed', progress: 100, owner: 'Jean-Baptiste Martin' });
-  const m2 = milestoneQueries.create({ name: 'Phase 2 — Authentication & Core APIs', description: 'SSO integration with Azure AD, customer data APIs v1, database migration scripts.', targetDate: '2026-07-31', status: 'completed', progress: 100, owner: 'Sophie Leclerc' });
+  const m1 = milestoneQueries.create({ name: 'Phase 1 — Architecture & Design', description: 'Technical architecture finalized, UX wireframes approved, dev environment ready.', targetDate: '2026-05-31', actualDate: '2026-05-26', status: 'completed', progress: 100, owner: 'Jean-Baptiste Martin' });
+  const m2 = milestoneQueries.create({ name: 'Phase 2 — Authentication & Core APIs', description: 'SSO integration with Azure AD, customer data APIs v1, database migration scripts.', targetDate: '2026-07-31', actualDate: '2026-08-04', status: 'completed', progress: 100, owner: 'Sophie Leclerc' });
   const m3 = milestoneQueries.create({ name: 'Phase 3 — Customer Portal MVP', description: 'Customer-facing portal MVP with full feature parity with legacy system.', targetDate: '2026-09-30', status: 'at-risk', progress: 55, owner: 'Jean-Baptiste Martin' });
   const m4 = milestoneQueries.create({ name: 'Phase 4 — UAT & Performance Testing', description: 'User acceptance testing with 50 pilot customers, load testing, security audit.', targetDate: '2026-11-15', status: 'planned', progress: 0, owner: 'Claire Fontaine' });
   const m5 = milestoneQueries.create({ name: 'Phase 5 — Production Migration & Cutover', description: 'Data migration, production deployment, cutover from legacy portal.', targetDate: '2026-12-31', status: 'planned', progress: 0, owner: 'Jean-Baptiste Martin' });

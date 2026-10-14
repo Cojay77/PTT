@@ -57,8 +57,12 @@ export default function Timeline() {
   const todayStr = today.toISOString().split('T')[0];
 
   // Timeline bounds — safe because sorted only contains dated milestones
-  const firstDate = sorted[0].targetDate;
-  const lastDate = sorted[sorted.length - 1].targetDate;
+  // Include actual dates if present so early or late completions are fully covered
+  const allDates = sorted
+    .flatMap(m => [m.targetDate, m.actualDate].filter(Boolean) as string[])
+    .sort();
+  const firstDate = allDates[0] || sorted[0].targetDate;
+  const lastDate = allDates[allDates.length - 1] || sorted[sorted.length - 1].targetDate;
   const startDate = new Date(firstDate);
   startDate.setDate(startDate.getDate() - 30);
   const endDate = new Date(lastDate);
@@ -95,15 +99,35 @@ export default function Timeline() {
       <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div className="section-title">Milestone & Task Gantt Timeline</div>
-          <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <input
-              type="checkbox"
-              checked={showTaskLanes}
-              onChange={e => setShowTaskLanes(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <span>Show Task Gantt Lanes</span>
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 9, height: 9, border: '1.5px dashed var(--text-muted)', transform: 'rotate(45deg)', display: 'inline-block' }} />
+                <span>Target Date</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 10, height: 10, background: 'var(--success)', transform: 'rotate(45deg)', display: 'inline-block', borderRadius: 2 }} />
+                <span>Early / On-time</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 10, height: 10, background: 'var(--danger)', transform: 'rotate(45deg)', display: 'inline-block', borderRadius: 2 }} />
+                <span>Late</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 16, height: 6, background: 'repeating-linear-gradient(45deg, rgba(79, 247, 168, 0.4), rgba(79, 247, 168, 0.4) 3px, rgba(79, 247, 168, 0.8) 3px, rgba(79, 247, 168, 0.8) 6px)', borderRadius: 2, display: 'inline-block' }} />
+                <span>Variance</span>
+              </div>
+            </div>
+            <label className="flex items-center gap-2" style={{ fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={showTaskLanes}
+                onChange={e => setShowTaskLanes(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <span>Show Task Gantt Lanes</span>
+            </label>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -128,8 +152,14 @@ export default function Timeline() {
             {sorted.map(m => {
               const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
               const isCompleted = m.status === 'completed';
+              const hasActual = Boolean(m.actualDate);
+              const varianceDays = (m.actualDate && m.targetDate) ? differenceInDays(parseISO(m.actualDate), parseISO(m.targetDate)) : null;
               const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), today) : null;
-              const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted;
+              const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted && !hasActual;
+              const isEarlyActual = varianceDays !== null && varianceDays < 0;
+              const isLateActual = varianceDays !== null && varianceDays > 0;
+              const targetPct = m.targetDate ? getPct(m.targetDate) : null;
+              const actualPct = m.actualDate ? getPct(m.actualDate) : null;
               const isExpanded = showTaskLanes || expandedMilestones.has(m.id);
 
               return (
@@ -145,24 +175,112 @@ export default function Timeline() {
                       ) : <span style={{ width: 14 }} />}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
-                        <div style={{ marginTop: 2 }}><MilestoneBadge status={isLate ? 'delayed' : m.status} /></div>
+                        <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                          <MilestoneBadge status={isLate ? 'delayed' : m.status} />
+                          {varianceDays !== null && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: varianceDays <= 0 ? 'var(--success)' : 'var(--danger)',
+                              padding: '0 4px',
+                              borderRadius: 3,
+                              background: varianceDays <= 0 ? 'rgba(79, 247, 168, 0.15)' : 'rgba(247, 79, 79, 0.15)',
+                            }}>
+                              {varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Bar track */}
                     <div style={{ flex: 1, position: 'relative', height: 36, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
                       {/* Today line */}
-                      <div style={{ position: 'absolute', left: todayX, top: 0, width: 2, height: '100%', background: 'var(--danger)', opacity: 0.6, zIndex: 2 }} />
+                      <div style={{ position: 'absolute', left: todayX, top: 0, width: 2, height: '100%', background: 'var(--danger)', opacity: 0.6, zIndex: 1 }} />
 
-                      {/* Milestone marker */}
-                      {m.targetDate && (
-                        <div style={{ position: 'absolute', left: getX(m.targetDate), top: '50%', transform: 'translate(-50%, -50%)', zIndex: 3 }}>
-                          <div style={{
-                            width: 16, height: 16,
-                            background: m.status === 'completed' ? 'var(--success)' : isLate ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)',
-                            borderRadius: 3, transform: 'rotate(45deg)',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                          }} title={`${m.name}: ${m.targetDate}`} />
+                      {/* Variance Connector Band (Difference between Target and Actual) */}
+                      {targetPct !== null && actualPct !== null && varianceDays !== null && varianceDays !== 0 && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${Math.min(targetPct, actualPct)}%`,
+                            width: `${Math.max(1, Math.abs(actualPct - targetPct))}%`,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            height: 10,
+                            borderRadius: 4,
+                            background: isEarlyActual
+                              ? 'repeating-linear-gradient(45deg, rgba(79, 247, 168, 0.25), rgba(79, 247, 168, 0.25) 5px, rgba(79, 247, 168, 0.45) 5px, rgba(79, 247, 168, 0.45) 10px)'
+                              : 'repeating-linear-gradient(45deg, rgba(247, 79, 79, 0.25), rgba(247, 79, 79, 0.25) 5px, rgba(247, 79, 79, 0.45) 5px, rgba(247, 79, 79, 0.45) 10px)',
+                            border: `1px dashed ${isEarlyActual ? 'var(--success)' : 'var(--danger)'}`,
+                            zIndex: 2,
+                          }}
+                          title={`Variance: ${Math.abs(varianceDays)} days ${isEarlyActual ? 'early' : 'late'} (${m.targetDate} → ${m.actualDate})`}
+                        />
+                      )}
+
+                      {/* Target Date Marker */}
+                      {targetPct !== null && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${targetPct}%`,
+                            top: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: hasActual ? 3 : 4,
+                          }}
+                          title={hasActual ? `Target Date: ${m.targetDate}` : `${m.name}: ${m.targetDate}`}
+                        >
+                          {hasActual ? (
+                            <div
+                              style={{
+                                width: 14,
+                                height: 14,
+                                background: 'var(--bg-surface)',
+                                border: '2px dashed var(--text-muted)',
+                                borderRadius: 2,
+                                transform: 'rotate(45deg)',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 16,
+                                height: 16,
+                                background: isCompleted ? 'var(--success)' : isLate ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)',
+                                borderRadius: 3,
+                                transform: 'rotate(45deg)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                              }}
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Actual Date Marker */}
+                      {actualPct !== null && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${actualPct}%`,
+                            top: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 5,
+                          }}
+                          title={`Actual Date: ${m.actualDate} (${varianceDays !== null ? (varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time') : 'Completed'})`}
+                        >
+                          <div
+                            style={{
+                              width: 16,
+                              height: 16,
+                              background: isLateActual ? 'var(--danger)' : 'var(--success)',
+                              borderRadius: 3,
+                              transform: 'rotate(45deg)',
+                              boxShadow: `0 2px 6px ${isLateActual ? 'rgba(247, 79, 79, 0.4)' : 'rgba(79, 247, 168, 0.4)'}`,
+                              border: '2px solid var(--bg-surface)',
+                            }}
+                          />
                         </div>
                       )}
 
@@ -186,18 +304,39 @@ export default function Timeline() {
                         }} />
                       )}
 
-                      {/* Date label */}
-                      {m.targetDate && (
-                        <div style={{
-                          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                          fontSize: 10,
-                          color: isCompleted ? 'var(--success)' : isLate ? 'var(--danger)' : 'var(--text-muted)',
-                          fontWeight: isCompleted || (daysLeft !== null && Math.abs(daysLeft) <= 7) ? 700 : 400
-                        }}>
-                          {format(parseISO(m.targetDate), 'MMM d')}
-                          {isCompleted ? ' (Completed)' : daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
-                        </div>
-                      )}
+                      {/* Date & Variance label */}
+                      <div style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 10,
+                        color: varianceDays !== null
+                          ? (varianceDays <= 0 ? 'var(--success)' : 'var(--danger)')
+                          : isCompleted
+                            ? 'var(--success)'
+                            : isLate
+                              ? 'var(--danger)'
+                              : 'var(--text-muted)',
+                        fontWeight: hasActual || isCompleted || (daysLeft !== null && Math.abs(daysLeft) <= 7) ? 700 : 400,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}>
+                        {hasActual && m.actualDate ? (
+                          <>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>
+                              Target: {format(parseISO(m.targetDate), 'MMM d')}
+                            </span>
+                            <span>→</span>
+                            <span>
+                              Actual: {format(parseISO(m.actualDate), 'MMM d')} ({varianceDays !== null ? (varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time') : 'Done'})
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {format(parseISO(m.targetDate), 'MMM d')}
+                            {isCompleted ? ' (Completed)' : daysLeft !== null && ` (${daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`})`}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* Progress */}
@@ -288,7 +427,8 @@ export default function Timeline() {
                 <th>Milestone</th>
                 <th>Status</th>
                 <th>Target Date</th>
-                <th>Days Left</th>
+                <th>Actual Date</th>
+                <th>Variance / Days Left</th>
                 <th>Progress</th>
                 <th>Owner</th>
                 <th>Tasks</th>
@@ -298,24 +438,61 @@ export default function Timeline() {
               {sorted.map(m => {
                 const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
                 const isCompleted = m.status === 'completed';
+                const hasActual = Boolean(m.actualDate);
+                const varianceDays = (m.actualDate && m.targetDate) ? differenceInDays(parseISO(m.actualDate), parseISO(m.targetDate)) : null;
                 const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), today) : null;
-                const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted;
+                const isLate = m.targetDate && m.targetDate < todayStr && !isCompleted && !hasActual;
                 return (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 600 }}>{m.name}</td>
-                    <td><MilestoneBadge status={isLate ? 'delayed' : m.status} /></td>
+                    <td>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <MilestoneBadge status={isLate ? 'delayed' : m.status} />
+                        {varianceDays !== null && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: varianceDays <= 0 ? 'var(--success)' : 'var(--danger)',
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              background: varianceDays <= 0 ? 'rgba(79, 247, 168, 0.15)' : 'rgba(247, 79, 79, 0.15)',
+                              border: `1px solid ${varianceDays <= 0 ? 'rgba(79, 247, 168, 0.3)' : 'rgba(247, 79, 79, 0.3)'}`,
+                            }}
+                          >
+                            {varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>{m.targetDate ? format(parseISO(m.targetDate), 'MMM d, yyyy') : '—'}</td>
                     <td style={{
-                      color: isCompleted
-                        ? 'var(--success)'
-                        : daysLeft !== null && daysLeft < 0
-                          ? 'var(--danger)'
-                          : daysLeft !== null && daysLeft <= 14
-                            ? 'var(--warning)'
-                            : 'var(--text-secondary)',
+                      fontWeight: m.actualDate ? 600 : 400,
+                      color: m.actualDate ? 'var(--text-primary)' : 'var(--text-muted)'
+                    }}>
+                      {m.actualDate ? format(parseISO(m.actualDate), 'MMM d, yyyy') : '—'}
+                    </td>
+                    <td style={{
+                      color: varianceDays !== null
+                        ? (varianceDays <= 0 ? 'var(--success)' : 'var(--danger)')
+                        : isCompleted
+                          ? 'var(--success)'
+                          : daysLeft !== null && daysLeft < 0
+                            ? 'var(--danger)'
+                            : daysLeft !== null && daysLeft <= 14
+                              ? 'var(--warning)'
+                              : 'var(--text-secondary)',
                       fontWeight: 600
                     }}>
-                      {isCompleted ? 'Completed' : daysLeft === null ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d late` : `${daysLeft}d`}
+                      {varianceDays !== null
+                        ? (varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time')
+                        : isCompleted
+                          ? 'Completed'
+                          : daysLeft === null
+                            ? '—'
+                            : daysLeft < 0
+                              ? `${Math.abs(daysLeft)}d late`
+                              : `${daysLeft}d`}
                     </td>
                     <td style={{ minWidth: 150 }}><ProgressBar value={m.progress} /></td>
                     <td style={{ color: 'var(--text-secondary)' }}>{m.owner || '—'}</td>

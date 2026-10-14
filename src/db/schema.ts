@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS milestones (
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
   target_date TEXT DEFAULT '',
+  actual_date TEXT DEFAULT '',
   status TEXT DEFAULT 'planned',
   progress INTEGER DEFAULT 0,
   owner TEXT DEFAULT '',
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS milestones (
 );
 
 CREATE INDEX IF NOT EXISTS idx_milestones_date ON milestones(target_date);
+CREATE INDEX IF NOT EXISTS idx_milestones_actual_date ON milestones(actual_date);
 CREATE INDEX IF NOT EXISTS idx_milestones_status ON milestones(status);
 
 -- Communications
@@ -440,5 +442,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 `;
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 

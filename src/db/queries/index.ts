@@ -11,6 +11,7 @@ function rowToMilestone(r: Record<string, unknown>): Milestone {
     name: r.name as string,
     description: (r.description as string) || '',
     targetDate: (r.target_date as string) || '',
+    actualDate: (r.actual_date as string) || '',
     status: r.status as Milestone['status'],
     progress: (r.progress as number) || 0,
     owner: (r.owner as string) || '',
@@ -41,14 +42,14 @@ export const milestoneQueries = {
     const id = generateId();
     const now = new Date().toISOString();
     execute(
-      `INSERT INTO milestones (id, name, description, target_date, status, progress, owner, dependencies, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, m.name || 'New Milestone', m.description || '', m.targetDate || '', m.status || 'planned', m.progress || 0, m.owner || '', m.dependencies || '', m.notes || '', now, now]
+      `INSERT INTO milestones (id, name, description, target_date, actual_date, status, progress, owner, dependencies, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, m.name || 'New Milestone', m.description || '', m.targetDate || '', m.actualDate || '', m.status || 'planned', m.progress || 0, m.owner || '', m.dependencies || '', m.notes || '', now, now]
     );
     return this.getById(id)!;
   },
   update(id: string, updates: Partial<Milestone>): Milestone | null {
     const now = new Date().toISOString();
-    const map: Record<string, string> = { name: 'name', description: 'description', targetDate: 'target_date', status: 'status', progress: 'progress', owner: 'owner', dependencies: 'dependencies', notes: 'notes' };
+    const map: Record<string, string> = { name: 'name', description: 'description', targetDate: 'target_date', actualDate: 'actual_date', status: 'status', progress: 'progress', owner: 'owner', dependencies: 'dependencies', notes: 'notes' };
     const fields: string[] = [], values: (string | number | null | boolean)[] = [];
     for (const [k, col] of Object.entries(map)) {
       if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof Milestone] as string | number); }

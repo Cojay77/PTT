@@ -88,6 +88,7 @@ export interface Milestone {
   name: string;
   description: string;
   targetDate: string;
+  actualDate?: string;
   status: MilestoneStatus;
   progress: number;
   owner: string;

@@ -10,7 +10,7 @@ function MilestoneModal({ milestone, onClose }: { milestone?: Partial<Milestone>
   const { createMilestone, updateMilestone } = useDataStore();
   const isEdit = Boolean(milestone?.id);
   const [form, setForm] = useState<Partial<Milestone>>({
-    name: '', description: '', targetDate: '', status: 'planned', progress: 0, owner: '', notes: '', ...milestone,
+    name: '', description: '', targetDate: '', actualDate: '', status: 'planned', progress: 0, owner: '', notes: '', ...milestone,
   });
   function save() {
     if (!form.name?.trim()) return;
@@ -32,12 +32,34 @@ function MilestoneModal({ milestone, onClose }: { milestone?: Partial<Milestone>
           <input className="input" type="date" value={form.targetDate || ''} onChange={e => setForm(p => ({ ...p, targetDate: e.target.value }))} />
         </div>
         <div className="form-group">
+          <div className="flex items-center justify-between">
+            <label className="form-label" style={{ marginBottom: 0 }}>Actual Date</label>
+            {form.actualDate && form.targetDate && (() => {
+              const diff = differenceInDays(parseISO(form.actualDate), parseISO(form.targetDate));
+              return (
+                <span style={{ fontSize: 11, fontWeight: 700, color: diff < 0 ? 'var(--success)' : diff > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                  {diff < 0 ? `${Math.abs(diff)}d early` : diff > 0 ? `${diff}d late` : 'On time'}
+                </span>
+              );
+            })()}
+          </div>
+          <input
+            className="input"
+            type="date"
+            value={form.actualDate || ''}
+            onChange={e => setForm(p => ({ ...p, actualDate: e.target.value }))}
+            placeholder="Completed date"
+          />
+        </div>
+        <div className="form-group">
           <label className="form-label">Status</label>
           <select className="select" value={form.status} onChange={e => {
             const nextStatus = e.target.value as MilestoneStatus;
+            const todayIso = new Date().toISOString().split('T')[0];
             setForm(p => ({
               ...p,
               status: nextStatus,
+              actualDate: nextStatus === 'completed' && !p.actualDate ? todayIso : p.actualDate,
               progress: nextStatus === 'completed' && (!p.progress || p.progress < 100) ? 100 : p.progress,
             }));
           }}>
@@ -48,14 +70,16 @@ function MilestoneModal({ milestone, onClose }: { milestone?: Partial<Milestone>
           <label className="form-label">Progress (%)</label>
           <input className="input" type="number" min="0" max="100" value={form.progress || 0} onChange={e => {
             const val = Math.min(100, Math.max(0, Number(e.target.value)));
+            const todayIso = new Date().toISOString().split('T')[0];
             setForm(p => ({
               ...p,
               progress: val,
               status: val === 100 && p.status !== 'completed' ? 'completed' : val < 100 && p.status === 'completed' ? 'in-progress' : p.status,
+              actualDate: val === 100 && !p.actualDate ? todayIso : p.actualDate,
             }));
           }} />
         </div>
-        <div className="form-group">
+        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label className="form-label">Owner</label>
           <PersonSelect
             value={form.owner || ''}
@@ -105,16 +129,48 @@ export default function Milestones() {
             const mTasks = tasks.filter(t => t.milestoneId === m.id && !t.isBacklog);
             const doneTasks = mTasks.filter(t => t.status === 'done').length;
             const isCompleted = m.status === 'completed';
+            const hasActual = Boolean(m.actualDate);
+            const varianceDays = (m.actualDate && m.targetDate) ? differenceInDays(parseISO(m.actualDate), parseISO(m.targetDate)) : null;
             const daysLeft = m.targetDate ? differenceInDays(parseISO(m.targetDate), new Date()) : null;
-            const isDelayed = m.targetDate && m.targetDate < today && !isCompleted;
+            const isDelayed = m.targetDate && m.targetDate < today && !isCompleted && !hasActual;
             return (
-              <div key={m.id} className="card" style={{ borderLeft: `4px solid ${isCompleted ? 'var(--success)' : m.status === 'delayed' || isDelayed ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : 'var(--accent)'}` }}>
+              <div
+                key={m.id}
+                className="card"
+                style={{
+                  borderLeft: `4px solid ${
+                    varianceDays !== null
+                      ? (varianceDays <= 0 ? 'var(--success)' : 'var(--danger)')
+                      : isCompleted
+                        ? 'var(--success)'
+                        : m.status === 'delayed' || isDelayed
+                          ? 'var(--danger)'
+                          : m.status === 'at-risk'
+                            ? 'var(--warning)'
+                            : 'var(--accent)'
+                  }`,
+                }}
+              >
                 <div className="card-body">
                   <div className="flex items-center gap-3 mb-3">
                     <div style={{ flex: 1 }}>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{m.name}</h3>
                         <MilestoneBadge status={isDelayed ? 'delayed' : m.status} />
+                        {varianceDays !== null && (
+                          <span
+                            className="badge"
+                            style={{
+                              background: varianceDays < 0 ? 'rgba(79, 247, 168, 0.15)' : varianceDays > 0 ? 'rgba(247, 79, 79, 0.15)' : 'rgba(79, 142, 247, 0.15)',
+                              color: varianceDays < 0 ? 'var(--success)' : varianceDays > 0 ? 'var(--danger)' : 'var(--accent)',
+                              border: `1px solid ${varianceDays < 0 ? 'rgba(79, 247, 168, 0.4)' : varianceDays > 0 ? 'rgba(247, 79, 79, 0.4)' : 'rgba(79, 142, 247, 0.4)'}`,
+                              fontWeight: 700,
+                              fontSize: 11,
+                            }}
+                          >
+                            {varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time'}
+                          </span>
+                        )}
                       </div>
                       {m.description && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 4 }}>{m.description}</p>}
                     </div>
@@ -122,26 +178,35 @@ export default function Milestones() {
                       <div style={{
                         fontWeight: 700,
                         fontSize: 'var(--text-xl)',
-                        color: isCompleted
-                          ? 'var(--success)'
-                          : daysLeft !== null && daysLeft < 0
-                            ? 'var(--danger)'
-                            : daysLeft !== null && daysLeft <= 7
-                              ? 'var(--warning)'
-                              : 'var(--text-primary)'
+                        color: varianceDays !== null
+                          ? (varianceDays <= 0 ? 'var(--success)' : 'var(--danger)')
+                          : isCompleted
+                            ? 'var(--success)'
+                            : daysLeft !== null && daysLeft < 0
+                              ? 'var(--danger)'
+                              : daysLeft !== null && daysLeft <= 7
+                                ? 'var(--warning)'
+                                : 'var(--text-primary)'
                       }}>
-                        {isCompleted
-                          ? 'Completed'
-                          : daysLeft === null
-                            ? '—'
-                            : daysLeft < 0
-                              ? `${Math.abs(daysLeft)}d late`
-                              : daysLeft === 0
-                                ? 'Today'
-                                : `${daysLeft}d left`}
+                        {varianceDays !== null
+                          ? (varianceDays < 0 ? `${Math.abs(varianceDays)}d early` : varianceDays > 0 ? `${varianceDays}d late` : 'On time')
+                          : isCompleted
+                            ? 'Completed'
+                            : daysLeft === null
+                              ? '—'
+                              : daysLeft < 0
+                                ? `${Math.abs(daysLeft)}d late`
+                                : daysLeft === 0
+                                  ? 'Today'
+                                  : `${daysLeft}d left`}
                       </div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                        {m.targetDate ? format(parseISO(m.targetDate), 'MMM d, yyyy') : 'No date'}
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                        <div>Target: {m.targetDate ? format(parseISO(m.targetDate), 'MMM d, yyyy') : 'No date'}</div>
+                        {m.actualDate && (
+                          <div style={{ color: varianceDays !== null ? (varianceDays <= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)', fontWeight: 600 }}>
+                            Actual: {format(parseISO(m.actualDate), 'MMM d, yyyy')}
+                          </div>
+                        )}
                       </div>
                       {m.owner && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Owner: {m.owner}</div>}
                     </div>

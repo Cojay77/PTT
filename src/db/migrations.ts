@@ -128,6 +128,13 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_portfolio_health ON portfolio_projects(health);
     `,
   },
+  {
+    version: 6,
+    up: `
+      ALTER TABLE milestones ADD COLUMN actual_date TEXT DEFAULT '';
+      CREATE INDEX IF NOT EXISTS idx_milestones_actual_date ON milestones(actual_date);
+    `,
+  },
 ];
 
 function safeRunMigration(db: Database, sql: string) {
