@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import {
   Plus, Trash2, Edit3, CalendarCheck, CheckSquare, Square,
   Scale, Zap, ListTodo, Link2, X, ChevronDown, ChevronUp,
-  Search, Calendar, User, Users, Clock, CheckCircle2, AlertCircle
+  Search, Calendar, User, Users, Clock, CheckCircle2, AlertCircle,
+  XCircle, RotateCcw
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
@@ -110,6 +111,8 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
     date: new Date().toISOString().split('T')[0],
     type: 'Project Meeting',
     participants: '',
+    status: 'scheduled',
+    cancellationReason: '',
     agenda: '',
     notes: '',
     decisions: '',
@@ -463,6 +466,30 @@ function MeetingModal({ meeting, onClose }: MeetingModalProps) {
                 ))}
               </select>
             </div>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select className="select" value={form.status || 'scheduled'} onChange={f('status')}>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed / Done</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            {form.status === 'cancelled' && (
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label required" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+                  Cancellation Reason
+                </label>
+                <textarea
+                  className="textarea"
+                  rows={2}
+                  placeholder="Specify why this meeting was cancelled..."
+                  value={form.cancellationReason || ''}
+                  onChange={f('cancellationReason')}
+                  style={{ borderColor: 'var(--danger)', background: 'rgba(247, 79, 79, 0.04)' }}
+                  autoFocus
+                />
+              </div>
+            )}
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="form-label">Participants (Team & Stakeholders)</label>
               <PeopleMultiSelect
@@ -1272,9 +1299,13 @@ export default function Meetings() {
 
   const [edit, setEdit] = useState<Partial<Meeting> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [cancellingMeeting, setCancellingMeeting] = useState<Meeting | null>(null);
+  const [cancellationInput, setCancellationInput] = useState('');
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'upcoming' | 'past' | 'cancelled'>('all');
   const [filterLinked, setFilterLinked] = useState<'all' | 'actions' | 'tasks' | 'decisions'>('all');
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // Track expanded meeting cards
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -1366,12 +1397,32 @@ export default function Meetings() {
     updateAction(action.id, { status: action.status === 'done' ? 'open' : 'done' });
   }
 
+  const { upcomingCount, pastCount, cancelledCount } = useMemo(() => {
+    let upcoming = 0;
+    let past = 0;
+    let cancelled = 0;
+    meetings.forEach(m => {
+      if (m.status === 'cancelled') cancelled++;
+      else if (m.status === 'completed' || (Boolean(m.date) && m.date < todayStr)) past++;
+      else upcoming++;
+    });
+    return { upcomingCount: upcoming, pastCount: past, cancelledCount: cancelled };
+  }, [meetings, todayStr]);
+
   const sorted = useMemo(() => {
     return [...meetings].sort((a, b) => b.date.localeCompare(a.date));
   }, [meetings]);
 
   const filtered = useMemo(() => {
     return sorted.filter(m => {
+      const isCancelled = m.status === 'cancelled';
+      const isPast = !isCancelled && (m.status === 'completed' || (Boolean(m.date) && m.date < todayStr));
+      const isUpcoming = !isCancelled && !isPast;
+
+      if (filterStatus === 'upcoming' && !isUpcoming) return false;
+      if (filterStatus === 'past' && !isPast) return false;
+      if (filterStatus === 'cancelled' && !isCancelled) return false;
+
       if (filterType !== 'all' && m.type !== filterType) return false;
 
       const linkedActs = getMeetingLinkedActions(m);
@@ -1397,7 +1448,7 @@ export default function Meetings() {
       }
       return true;
     });
-  }, [sorted, filterType, filterLinked, search, actions, tasks, decisions]);
+  }, [sorted, filterStatus, filterType, filterLinked, search, actions, tasks, decisions, todayStr]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1406,7 +1457,7 @@ export default function Meetings() {
         <div>
           <h1 className="page-title">Meetings & Governance</h1>
           <p className="page-subtitle">
-            {meetings.length} meetings recorded · Link agenda notes with actionable tasks, decisions, and action items
+            {meetings.length} recorded · {upcomingCount} upcoming · {pastCount} completed / past · {cancelledCount} canceled
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -1467,6 +1518,21 @@ export default function Meetings() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Status:</label>
+          <select
+            className="select"
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value as any)}
+            style={{ height: 32, fontSize: 12, padding: '0 8px' }}
+          >
+            <option value="all">All Statuses ({meetings.length})</option>
+            <option value="upcoming">Upcoming ({upcomingCount})</option>
+            <option value="past">Completed / Past ({pastCount})</option>
+            <option value="cancelled">Canceled ({cancelledCount})</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Type:</label>
           <select
             className="select"
@@ -1498,11 +1564,12 @@ export default function Meetings() {
           </select>
         </div>
 
-        {(search || filterType !== 'all' || filterLinked !== 'all') && (
+        {(search || filterStatus !== 'all' || filterType !== 'all' || filterLinked !== 'all') && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
               setSearch('');
+              setFilterStatus('all');
               setFilterType('all');
               setFilterLinked('all');
             }}
@@ -1548,14 +1615,30 @@ export default function Meetings() {
             const linkedDecisionIdSet = new Set(linkedDecisions.map(d => d.id));
             const availableToLinkDecisions = decisions.filter(d => !linkedDecisionIdSet.has(d.id));
 
+            const isCancelled = m.status === 'cancelled';
+            const isPast = !isCancelled && (m.status === 'completed' || (Boolean(m.date) && m.date < todayStr));
+            const isUpcoming = !isCancelled && !isPast;
+
             return (
               <div
                 key={m.id}
                 className="card"
                 style={{
                   overflow: 'hidden',
-                  border: isExpanded ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  border: isExpanded
+                    ? '1px solid var(--accent)'
+                    : isCancelled
+                    ? '1px solid rgba(247, 79, 79, 0.35)'
+                    : isPast
+                    ? '1px solid var(--border)'
+                    : '1px solid var(--border)',
+                  borderLeft: isCancelled
+                    ? '4px solid var(--danger)'
+                    : isPast
+                    ? '4px solid var(--success)'
+                    : '4px solid var(--accent)',
                   boxShadow: isExpanded ? 'var(--shadow-md)' : 'var(--shadow-sm)',
+                  opacity: isCancelled ? 0.92 : 1,
                   transition: 'border var(--transition-fast), box-shadow var(--transition-fast)',
                 }}
               >
@@ -1567,7 +1650,13 @@ export default function Meetings() {
                     alignItems: 'flex-start',
                     gap: 16,
                     cursor: 'pointer',
-                    background: isExpanded ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                    background: isExpanded
+                      ? 'var(--bg-elevated)'
+                      : isCancelled
+                      ? 'rgba(247, 79, 79, 0.02)'
+                      : isPast
+                      ? 'rgba(79, 247, 168, 0.02)'
+                      : 'var(--bg-surface)',
                   }}
                   onClick={() => toggleExpand(m.id)}
                 >
@@ -1575,40 +1664,117 @@ export default function Meetings() {
                   <div
                     style={{
                       textAlign: 'center',
-                      background: 'var(--accent-soft)',
+                      background: isCancelled
+                        ? 'rgba(247, 79, 79, 0.1)'
+                        : isPast
+                        ? 'rgba(79, 247, 168, 0.12)'
+                        : 'var(--accent-soft)',
+                      border: isCancelled
+                        ? '1px solid rgba(247, 79, 79, 0.25)'
+                        : isPast
+                        ? '1px solid rgba(79, 247, 168, 0.25)'
+                        : '1px solid transparent',
                       borderRadius: 'var(--radius-md)',
                       padding: '8px 14px',
                       flexShrink: 0,
                     }}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase' }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: isCancelled ? 'var(--danger)' : isPast ? 'var(--success)' : 'var(--accent)',
+                        textTransform: 'uppercase',
+                      }}
+                    >
                       {m.date ? format(parseISO(m.date), 'MMM') : '—'}
                     </div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
                       {m.date ? format(parseISO(m.date), 'd') : '—'}
                     </div>
-                    {m.date && (
-                      <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {format(parseISO(m.date), 'yyyy')}
-                      </div>
-                    )}
+                    <div
+                      style={{
+                        fontSize: 9,
+                        color: isCancelled ? 'var(--danger)' : isPast ? 'var(--success)' : 'var(--text-muted)',
+                        marginTop: 3,
+                        fontWeight: isCancelled || isPast ? 700 : 500,
+                        letterSpacing: '0.03em',
+                      }}
+                    >
+                      {isCancelled ? 'CANCELED' : isPast ? 'DONE' : m.date ? format(parseISO(m.date), 'yyyy') : ''}
+                    </div>
                   </div>
 
                   {/* Main Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span style={{ fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--text-primary)' }}>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 'var(--text-md)',
+                          color: isCancelled ? 'var(--text-secondary)' : 'var(--text-primary)',
+                          textDecoration: isCancelled ? 'line-through' : 'none',
+                        }}
+                      >
                         {m.title}
                       </span>
                       <span className="badge badge-neutral" style={{ fontSize: 11 }}>
                         {m.type}
                       </span>
+                      {isCancelled ? (
+                        <span
+                          className="badge badge-danger"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600 }}
+                        >
+                          <X size={12} /> Canceled
+                        </span>
+                      ) : isPast ? (
+                        <span
+                          className="badge badge-success"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600 }}
+                        >
+                          <CheckCircle2 size={12} /> Done
+                        </span>
+                      ) : (
+                        <span
+                          className="badge badge-info"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600 }}
+                        >
+                          <Calendar size={12} /> Upcoming
+                        </span>
+                      )}
                     </div>
 
                     {m.participants && (
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <User size={12} />
                         <span className="truncate">{m.participants}</span>
+                      </div>
+                    )}
+
+                    {/* Cancellation Reason Banner on Card */}
+                    {isCancelled && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          marginBottom: 6,
+                          padding: '6px 10px',
+                          background: 'rgba(247, 79, 79, 0.08)',
+                          border: '1px solid rgba(247, 79, 79, 0.22)',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: 12,
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                        }}
+                      >
+                        <AlertCircle size={14} color="var(--danger)" style={{ flexShrink: 0, marginTop: 1 }} />
+                        <div>
+                          <strong style={{ color: 'var(--danger)' }}>Cancellation Reason:</strong>{' '}
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            {m.cancellationReason || 'No reason provided.'}
+                          </span>
+                        </div>
                       </div>
                     )}
 
@@ -1689,6 +1855,49 @@ export default function Meetings() {
 
                   {/* Actions & Expand Toggle */}
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    {/* Toggle Completed / Scheduled */}
+                    {!isCancelled && (
+                      <button
+                        className="btn-icon btn-ghost"
+                        style={{ color: isPast ? 'var(--text-muted)' : 'var(--success)' }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          updateMeeting(m.id, { status: isPast ? 'scheduled' : 'completed' });
+                        }}
+                        title={isPast ? 'Mark as scheduled (reopen)' : 'Mark meeting as completed (done)'}
+                      >
+                        <CheckCircle2 size={14} />
+                      </button>
+                    )}
+
+                    {/* Quick Cancel or Restore */}
+                    {!isCancelled ? (
+                      <button
+                        className="btn-icon btn-ghost"
+                        style={{ color: 'var(--danger)' }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setCancellingMeeting(m);
+                          setCancellationInput(m.cancellationReason || '');
+                        }}
+                        title="Cancel this meeting..."
+                      >
+                        <XCircle size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        style={{ color: 'var(--accent)', fontSize: 11, padding: '2px 6px' }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          updateMeeting(m.id, { status: 'scheduled', cancellationReason: '' });
+                        }}
+                        title="Restore meeting to scheduled"
+                      >
+                        <RotateCcw size={11} /> Restore
+                      </button>
+                    )}
+
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={() => toggleExpand(m.id)}
@@ -2110,6 +2319,51 @@ export default function Meetings() {
 
       {/* Meeting Modal */}
       {edit !== null && <MeetingModal meeting={edit} onClose={() => setEdit(null)} />}
+
+      {/* Quick Cancellation Modal */}
+      {cancellingMeeting && (
+        <Modal
+          title={`Cancel Meeting: ${cancellingMeeting.title}`}
+          onClose={() => setCancellingMeeting(null)}
+          size="sm"
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setCancellingMeeting(null)}>Close</button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  updateMeeting(cancellingMeeting.id, {
+                    status: 'cancelled',
+                    cancellationReason: cancellationInput.trim() || 'No reason specified',
+                  });
+                  setCancellingMeeting(null);
+                }}
+              >
+                Confirm Cancellation
+              </button>
+            </>
+          }
+        >
+          <div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+              Marking this meeting as canceled preserves all discussions, notes, and linked actions/decisions in the historical log.
+            </p>
+            <div className="form-group">
+              <label className="form-label required" style={{ fontWeight: 600 }}>
+                Reason for Cancellation
+              </label>
+              <textarea
+                className="textarea"
+                rows={3}
+                placeholder="e.g., Client stakeholders unavailable, postponed to next sprint, agenda resolved async..."
+                value={cancellationInput}
+                onChange={e => setCancellationInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Confirm Delete Dialog */}
       {deleteId && (

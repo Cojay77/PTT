@@ -140,6 +140,7 @@ export function seedDemoData(): void {
     relatedActionIds: `${act1.id},${act2.id},${act3.id}`,
     relatedTaskIds: `${t1.id},${t2.id}`,
     relatedDecisionIds: `${d1.id}`,
+    status: 'completed',
   });
   actionQueries.update(act1.id, { relatedMeetingId: mtg1.id });
   actionQueries.update(act2.id, { relatedMeetingId: mtg1.id });
@@ -149,7 +150,8 @@ export function seedDemoData(): void {
   meetingQueries.create({
     title: 'Steering Committee — September 2026',
     date: relDate(7),
-    type: 'steering-committee',
+    type: 'Steering Committee',
+    status: 'scheduled',
     participants: 'Claire Fontaine, Marc Lefort, Jean-Baptiste Martin',
     agenda: '1. Phase 3 status and risks\n2. Go/No-Go decision for Sept 30 delivery\n3. Phase 4 planning\n4. Budget review',
     notes: '',
@@ -157,6 +159,19 @@ export function seedDemoData(): void {
     actions: '',
     relatedDecisionIds: `${d1.id}`,
     relatedTaskIds: `${t1.id}`,
+  });
+
+  meetingQueries.create({
+    title: 'Vendor SLA & Contract Review',
+    date: relDate(-2),
+    type: 'Vendor Meeting',
+    status: 'cancelled',
+    cancellationReason: 'Vendor lead unavailable due to critical outage. Rescheduling once post-mortem report is delivered.',
+    participants: 'Pierre Duval, Jean-Baptiste Martin',
+    agenda: '1. Monthly SLA benchmarks\n2. Cloud consumption overages\n3. Renewal terms',
+    notes: 'Meeting canceled 3 hours prior.',
+    decisions: '',
+    actions: '',
   });
 
   // Notes

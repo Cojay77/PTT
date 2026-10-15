@@ -436,6 +436,8 @@ function rowToMeeting(r: Record<string, unknown>): Meeting {
     relatedActionIds: (r.related_action_ids as string) || '',
     relatedTaskIds: (r.related_task_ids as string) || '',
     relatedDecisionIds: (r.related_decision_ids as string) || '',
+    status: (r.status as Meeting['status']) || 'scheduled',
+    cancellationReason: (r.cancellation_reason as string) || '',
     createdAt: r.created_at as string, updatedAt: r.updated_at as string,
   };
 }
@@ -445,8 +447,8 @@ export const meetingQueries = {
   getById(id: string): Meeting | null { const r = queryOne<Record<string, unknown>>(`SELECT * FROM meetings WHERE id = ?`, [id]); return r ? rowToMeeting(r) : null; },
   create(m: Partial<Meeting>): Meeting {
     const id = generateId(); const now = new Date().toISOString();
-    execute(`INSERT INTO meetings (id, title, date, type, participants, agenda, notes, decisions, actions, risks_identified, blockers_identified, follow_ups, related_action_ids, related_task_ids, related_decision_ids, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, m.title || 'New Meeting', m.date || now.split('T')[0], m.type || 'project-meeting', m.participants || '', m.agenda || '', m.notes || '', m.decisions || '', m.actions || '', m.risksIdentified || '', m.blockersIdentified || '', m.followUps || '', m.relatedActionIds || '', m.relatedTaskIds || '', m.relatedDecisionIds || '', now, now]);
+    execute(`INSERT INTO meetings (id, title, date, type, participants, agenda, notes, decisions, actions, risks_identified, blockers_identified, follow_ups, related_action_ids, related_task_ids, related_decision_ids, status, cancellation_reason, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, m.title || 'New Meeting', m.date || now.split('T')[0], m.type || 'project-meeting', m.participants || '', m.agenda || '', m.notes || '', m.decisions || '', m.actions || '', m.risksIdentified || '', m.blockersIdentified || '', m.followUps || '', m.relatedActionIds || '', m.relatedTaskIds || '', m.relatedDecisionIds || '', m.status || 'scheduled', m.cancellationReason || '', now, now]);
     return this.getById(id)!;
   },
   update(id: string, updates: Partial<Meeting>): Meeting | null {
@@ -456,7 +458,8 @@ export const meetingQueries = {
       agenda: 'agenda', notes: 'notes', decisions: 'decisions', actions: 'actions',
       risksIdentified: 'risks_identified', blockersIdentified: 'blockers_identified',
       followUps: 'follow_ups', relatedActionIds: 'related_action_ids',
-      relatedTaskIds: 'related_task_ids', relatedDecisionIds: 'related_decision_ids'
+      relatedTaskIds: 'related_task_ids', relatedDecisionIds: 'related_decision_ids',
+      status: 'status', cancellationReason: 'cancellation_reason'
     };
     const fields: string[] = [], values: (string | number | null | boolean)[] = [];
     for (const [k, col] of Object.entries(map)) { if (k in updates) { fields.push(`${col} = ?`); values.push(updates[k as keyof Meeting] as string); } }

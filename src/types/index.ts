@@ -244,6 +244,8 @@ export interface Action {
   updatedAt: string;
 }
 
+export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled';
+
 export interface Meeting {
   id: ID;
   title: string;
@@ -260,6 +262,8 @@ export interface Meeting {
   relatedActionIds?: string;
   relatedTaskIds?: string;
   relatedDecisionIds?: string;
+  status?: MeetingStatus;
+  cancellationReason?: string;
   createdAt: string;
   updatedAt: string;
 }

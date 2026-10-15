@@ -286,11 +286,14 @@ CREATE TABLE IF NOT EXISTS meetings (
   related_action_ids TEXT DEFAULT '',
   related_task_ids TEXT DEFAULT '',
   related_decision_ids TEXT DEFAULT '',
+  status TEXT DEFAULT 'scheduled',
+  cancellation_reason TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
 
 -- Notes / Notebook
 CREATE TABLE IF NOT EXISTS notes (
@@ -442,5 +445,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 `;
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 

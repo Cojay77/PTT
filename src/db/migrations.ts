@@ -135,6 +135,14 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_milestones_actual_date ON milestones(actual_date);
     `,
   },
+  {
+    version: 7,
+    up: `
+      ALTER TABLE meetings ADD COLUMN status TEXT DEFAULT 'scheduled';
+      ALTER TABLE meetings ADD COLUMN cancellation_reason TEXT DEFAULT '';
+      CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
+    `,
+  },
 ];
 
 function safeRunMigration(db: Database, sql: string) {

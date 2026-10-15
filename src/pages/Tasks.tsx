@@ -5,6 +5,7 @@ import { useDataStore } from '../store/useDataStore';
 import { StatusBadge, PriorityBadge, DateDisplay, Modal, ConfirmDialog, EmptyState, ProgressBar, PersonSelect, PeopleMultiSelect } from '../components/ui/shared';
 import type { Task, TaskStatus, Priority } from '../types';
 import { exportTasksToCsv, downloadTaskTemplateCsv, parseCsv } from '../utils/export';
+import { TaskDeadlinesTimeline } from '../components/tasks/TaskDeadlinesTimeline';
 
 const STATUSES: TaskStatus[] = ['backlog', 'planned', 'ready', 'in-progress', 'blocked', 'waiting', 'done', 'cancelled'];
 const PRIORITIES: Priority[] = ['critical', 'high', 'medium', 'low', 'none'];
@@ -612,6 +613,9 @@ export default function Tasks() {
           </table>
         </div>
       )}
+
+      {/* Upcoming Task Deadlines Timeline Visual */}
+      <TaskDeadlinesTimeline tasks={tasks} onEditTask={setEditTask} />
 
       {editTask !== null && <TaskModal task={editTask} onClose={() => setEditTask(null)} />}
       {deleteId && (
