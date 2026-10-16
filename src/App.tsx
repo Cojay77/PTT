@@ -7,6 +7,7 @@ import { useWorkspaceStore } from './store/useWorkspaceStore';
 import Layout from './components/layout/Layout';
 
 // Pages
+import Today from './pages/Today';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import ProjectOverview from './pages/ProjectOverview';
@@ -79,7 +80,8 @@ export default function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<Navigate to="/today" replace />} />
+          <Route path="today" element={<Today />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="projects" element={<Projects />} />
           <Route path="portfolio" element={<Portfolio />} />

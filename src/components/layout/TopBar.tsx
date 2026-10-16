@@ -24,6 +24,7 @@ import {
 } from '../../utils/notifications';
 
 const PAGE_TITLES: Record<string, string> = {
+  '/today': 'Today · Morning Briefing',
   '/dashboard': 'Dashboard',
   '/projects': 'Projects Hub',
   '/portfolio': 'Portfolio',

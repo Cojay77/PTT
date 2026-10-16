@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, FolderKanban, CheckSquare, ListTodo, Milestone, MessageSquare,
+  Sunrise, LayoutDashboard, FolderKanban, CheckSquare, ListTodo, Milestone, MessageSquare,
   Users, UserCog, CalendarDays, AlertTriangle, Zap, Scale,
   CalendarCheck, Shield, BookOpen, BarChart3, ClipboardCheck, GitBranch,
   HandshakeIcon, Settings, ChevronLeft, ChevronRight, PlusCircle, DollarSign, GitMerge,
@@ -21,6 +21,7 @@ const navGroups = [
   {
     label: 'Command',
     items: [
+      { path: '/today', icon: Sunrise, label: 'Today Briefing' },
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { path: '/projects', icon: Folders, label: 'Projects Hub' },
       { path: '/portfolio', icon: Briefcase, label: 'Portfolio' },

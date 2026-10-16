@@ -5,11 +5,11 @@ export {
   getCurrentProjectFilePath, onProjectFileChange,
   isReadOnlyProject, getActiveLockInfo, setReadOnlyMode,
   // Multi-project workspace
-  getActiveProjectId, isFreshWorkspace, flushPendingSave, listWorkspaceProjects,
+  getActiveProjectId, isFreshWorkspace, flushPendingSave, listWorkspaceProjects, mapWorkspaceProjects,
   switchProject, createProject, importProjectFromBytes, duplicateProject, renameProject,
   setProjectColor, deleteProject, reloadActiveProjectFromStorage, exportProjectFile,
   exportWorkspaceBundle, importWorkspaceBundle, openWorkspaceBundleDialog,
   resetWorkspace, resetCurrentProject, restoreIntoCurrentProject,
 } from './db';
-export type { WorkspaceProject, WorkspaceProjectSummary, NewProjectTemplate } from './db';
+export type { WorkspaceProject, WorkspaceProjectSummary, NewProjectTemplate, WorkspaceReadResult } from './db';
 export { getStorageEstimate, PROJECT_COLORS } from './projectStore';

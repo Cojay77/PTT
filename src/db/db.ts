@@ -432,6 +432,57 @@ export async function listWorkspaceProjects(): Promise<WorkspaceProject[]> {
   return listProjects();
 }
 
+export interface WorkspaceReadResult<T> {
+  meta: WorkspaceProject;
+  isActive: boolean;
+  /** Undefined when the project was skipped or failed to read. */
+  value?: T;
+  skipped?: boolean;
+  error?: string;
+}
+
+/**
+ * Run a READ-ONLY function against every project of the workspace.
+ * - The active project is read from memory (includes not-yet-flushed edits).
+ * - Other projects are opened from IndexedDB in a throwaway instance that is
+ *   always closed afterwards and never persisted.
+ * `shouldRead` lets callers skip projects (e.g. when a cached result is still fresh).
+ */
+export async function mapWorkspaceProjects<T>(
+  reader: (d: Database, meta: WorkspaceProject, isActive: boolean) => T,
+  shouldRead: (meta: WorkspaceProject, isActive: boolean) => boolean = () => true,
+): Promise<WorkspaceReadResult<T>[]> {
+  const projects = await listProjects();
+  const out: WorkspaceReadResult<T>[] = [];
+  for (const meta of projects) {
+    const isActive = meta.id === activeProjectId && !!db;
+    if (!shouldRead(meta, isActive)) {
+      out.push({ meta, isActive, skipped: true });
+      continue;
+    }
+    if (isActive && db) {
+      try {
+        out.push({ meta, isActive, value: reader(db, meta, true) });
+      } catch (err) {
+        out.push({ meta, isActive, error: String(err) });
+      }
+      continue;
+    }
+    let temp: Database | null = null;
+    try {
+      const bytes = await loadProjectData(meta.id);
+      if (!bytes) { out.push({ meta, isActive, error: 'No data stored for this project.' }); continue; }
+      temp = await openDatabaseFromBytes(bytes);
+      out.push({ meta, isActive, value: reader(temp, meta, false) });
+    } catch (err) {
+      out.push({ meta, isActive, error: String(err) });
+    } finally {
+      try { temp?.close(); } catch { /* noop */ }
+    }
+  }
+  return out;
+}
+
 export async function switchProject(id: string): Promise<void> {
   if (id === activeProjectId) return;
   await flushPendingSave();
