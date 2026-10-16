@@ -3704,4 +3704,214 @@ input, textarea, select {
   border-radius: var(--radius-xl);
 }
 
+/* ============================================================
+   Handover View Styles
+   ============================================================ */
+
+.handover-banner {
+  background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.handover-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.handover-kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.handover-kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
+}
+
+.handover-kpi-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.handover-kpi-card.alert {
+  border-left: 3px solid var(--danger);
+}
+
+.handover-kpi-card.warning {
+  border-left: 3px solid var(--warning);
+}
+
+.handover-kpi-card.info {
+  border-left: 3px solid var(--accent);
+}
+
+.handover-kpi-card.success {
+  border-left: 3px solid var(--success);
+}
+
+.handover-item-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  transition: border-color var(--transition-fast);
+}
+
+.handover-item-card:hover {
+  border-color: var(--border-strong);
+}
+
+.handover-item-card.critical {
+  border-left: 4px solid var(--danger);
+  background: linear-gradient(90deg, var(--danger-bg) 0%, var(--bg-surface) 12%);
+}
+
+.handover-item-card.warning {
+  border-left: 4px solid var(--warning);
+  background: linear-gradient(90deg, var(--warning-bg) 0%, var(--bg-surface) 12%);
+}
+
+.handover-item-card.accent {
+  border-left: 4px solid var(--accent);
+}
+
+.handover-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.handover-contact-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.handover-contact-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all var(--transition-fast);
+}
+
+.handover-contact-card:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
+}
+
+.handover-nav-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-5);
+}
+
+.handover-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.handover-nav-pill:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.handover-nav-pill.active {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.handover-pill-badge {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+}
+
+.handover-nav-pill.active .handover-pill-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* Print Styles */
+@media print {
+  .app-sidebar,
+  .sidebar,
+  .topbar,
+  .btn,
+  .handover-nav-pills,
+  .no-print,
+  .quick-capture-btn,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  body, html, .app-shell, .main-area, .page-content {
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .card, .handover-banner, .handover-item-card, .handover-contact-card {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 14px !important;
+  }
+
+  .section-title, .page-title {
+    color: #000 !important;
+  }
+
+  a {
+    text-decoration: underline !important;
+    color: #000 !important;
+  }
+}
+
+
 
