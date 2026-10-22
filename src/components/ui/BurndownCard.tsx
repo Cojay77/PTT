@@ -20,7 +20,7 @@ export function BurndownCard({
   config,
   milestones = [],
   height = 220,
-  title = 'Task Burndown & Trajectory',
+  title = 'Task Burndown & Delivery Pace',
   showKpis = true,
 }: BurndownCardProps) {
   const burndown = useMemo(
@@ -36,7 +36,7 @@ export function BurndownCard({
           <span className="section-title">{title}</span>
         </div>
         <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)', fontSize: 13 }}>
-          No active tasks recorded. Add tasks to see the project burndown trajectory.
+          No active tasks recorded. Add tasks to see the project burndown chart.
         </div>
       </div>
     );
@@ -45,7 +45,7 @@ export function BurndownCard({
   const StatusIcon =
     burndown.status === 'completed'
       ? CheckCircle2
-      : burndown.status === 'on-track'
+      : burndown.status === 'on-track' || burndown.status === 'ahead'
       ? Zap
       : AlertTriangle;
 
@@ -93,8 +93,8 @@ export function BurndownCard({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Zap size={12} color="var(--accent)" />
-            <span>Velocity:</span>
-            <strong style={{ color: 'var(--text-primary)' }}>{burndown.velocityPerWeek} tasks/week</strong>
+            <span>Pace vs. Plan:</span>
+            <strong style={{ color: burndown.statusColor }}>{burndown.statusLabel}</strong>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Clock size={12} color="var(--text-secondary)" />
@@ -137,7 +137,6 @@ export function BurndownCard({
                 const labelMap: Record<string, string> = {
                   Ideal: 'Ideal Planned Pace',
                   Remaining: 'Actual Remaining',
-                  Projected: 'Projected Remaining',
                 };
                 return [`${value} task${value !== 1 ? 's' : ''}`, labelMap[name] || name];
               }}
@@ -146,9 +145,8 @@ export function BurndownCard({
               wrapperStyle={{ fontSize: 11, paddingTop: 6 }}
               formatter={(val: string) => {
                 const legendMap: Record<string, string> = {
-                  Ideal: 'Ideal Burn (Linear Pace)',
-                  Remaining: 'Actual Remaining Tasks',
-                  Projected: 'Projected Trajectory (Velocity)',
+                  Ideal: 'Ideal Pace (Baseline to Target)',
+                  Remaining: 'Actual Remaining Tasks (to Today)',
                 };
                 return legendMap[val] || val;
               }}
@@ -169,16 +167,6 @@ export function BurndownCard({
               stroke="var(--accent)"
               strokeWidth={2.5}
               dot={{ r: 4, fill: 'var(--accent)' }}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="Projected"
-              name="Projected"
-              stroke="#4ff7a8"
-              strokeDasharray="3 3"
-              strokeWidth={2}
-              dot={{ r: 3, fill: '#4ff7a8' }}
               connectNulls={false}
             />
           </LineChart>

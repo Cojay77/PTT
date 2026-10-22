@@ -7,7 +7,6 @@ export interface BurndownPoint {
   isToday?: boolean;
   Ideal: number;
   Remaining?: number;
-  Projected?: number;
 }
 
 export interface BurndownAnalysis {
@@ -17,9 +16,11 @@ export interface BurndownAnalysis {
   remainingTasks: number;
   completionRate: number;
   velocityPerWeek: number;
-  projectedFinishDate: string | null;
+  idealRemainingToday: number;
+  paceVariance: number; // < 0 means ahead of pace (fewer tasks left), > 0 means behind pace
   targetDate: string | null;
-  status: 'completed' | 'on-track' | 'at-risk' | 'behind' | 'not-started';
+  startDate: string | null;
+  status: 'completed' | 'ahead' | 'on-track' | 'at-risk' | 'behind' | 'not-started';
   statusLabel: string;
   statusColor: string;
 }
@@ -56,8 +57,10 @@ export function computeBurndown(
       remainingTasks: 0,
       completionRate: 0,
       velocityPerWeek: 0,
-      projectedFinishDate: null,
+      idealRemainingToday: 0,
+      paceVariance: 0,
       targetDate: null,
+      startDate: null,
       status: 'not-started',
       statusLabel: 'No active tasks',
       statusColor: 'var(--text-muted)',
@@ -67,7 +70,6 @@ export function computeBurndown(
   // 1. Determine Project Start Date
   let startDate = parseValidDate(config?.startDate);
   if (!startDate) {
-    // Try earliest task createdAt or startDate
     for (const t of activeTasks) {
       const d1 = parseValidDate(t.startDate);
       const d2 = parseValidDate(t.createdAt);
@@ -76,7 +78,6 @@ export function computeBurndown(
     }
   }
   if (!startDate || startDate > today) {
-    // Default start to 4 weeks ago if not set or in future
     startDate = subDays(today, 28);
   }
   startDate.setHours(0, 0, 0, 0);
@@ -84,12 +85,10 @@ export function computeBurndown(
   // 2. Determine Project Target Date
   let targetDate = parseValidDate(config?.targetDate);
   if (!targetDate) {
-    // Check milestones with target dates
     for (const m of milestones) {
       const d = parseValidDate(m.targetDate);
       if (d && (!targetDate || d > targetDate)) targetDate = d;
     }
-    // Check task due dates
     for (const t of activeTasks) {
       const d = parseValidDate(t.dueDate);
       if (d && (!targetDate || d > targetDate)) targetDate = d;
@@ -100,47 +99,52 @@ export function computeBurndown(
   }
   targetDate.setHours(0, 0, 0, 0);
 
-  // 3. Determine Velocity and Projected Finish
-  const daysElapsed = Math.max(1, differenceInDays(today, startDate));
-  const tasksPerDay = doneTasks / daysElapsed;
-  const velocityPerWeek = Math.round(tasksPerDay * 7 * 10) / 10;
+  // 3. Determine Pace vs Ideal Planned Schedule at Today
+  const totalDays = Math.max(1, differenceInDays(targetDate, startDate));
+  const todayOffset = Math.max(0, differenceInDays(today, startDate));
+  const idealProgressFrac = Math.max(0, Math.min(1, todayOffset / totalDays));
+  const idealRemainingToday = Math.round(totalTasks * (1 - idealProgressFrac));
+  const paceVariance = remainingTasks - idealRemainingToday;
 
-  let projectedFinishDate: Date | null = null;
+  const daysElapsed = Math.max(1, differenceInDays(today, startDate));
+  const velocityPerWeek = Math.round((doneTasks / daysElapsed) * 7 * 10) / 10;
+
   let status: BurndownAnalysis['status'] = 'on-track';
-  let statusLabel = 'On track';
+  let statusLabel = 'On pace with target';
   let statusColor = 'var(--success)';
 
   if (remainingTasks === 0) {
     status = 'completed';
     statusLabel = 'Completed';
     statusColor = 'var(--success)';
+  } else if (doneTasks === 0 && today > startDate && idealRemainingToday < totalTasks) {
+    status = 'behind';
+    statusLabel = `${totalTasks - idealRemainingToday} tasks behind pace`;
+    statusColor = 'var(--danger)';
   } else if (doneTasks === 0) {
     status = 'not-started';
-    statusLabel = 'No tasks completed yet';
+    statusLabel = 'Not started';
+    statusColor = 'var(--text-muted)';
+  } else if (paceVariance < -1) {
+    status = 'ahead';
+    statusLabel = `${Math.abs(paceVariance)} task${Math.abs(paceVariance) !== 1 ? 's' : ''} ahead of pace`;
+    statusColor = 'var(--success)';
+  } else if (paceVariance >= -1 && paceVariance <= 1) {
+    status = 'on-track';
+    statusLabel = 'On pace with target';
+    statusColor = 'var(--success)';
+  } else if (paceVariance > 1 && paceVariance <= 3) {
+    status = 'at-risk';
+    statusLabel = `${paceVariance} tasks behind pace`;
     statusColor = 'var(--warning)';
   } else {
-    const daysNeeded = Math.ceil(remainingTasks / tasksPerDay);
-    projectedFinishDate = addDays(today, daysNeeded);
-
-    const daysVariance = differenceInDays(projectedFinishDate, targetDate);
-    if (daysVariance <= 0) {
-      status = 'on-track';
-      statusLabel = `On track (projected ${format(projectedFinishDate, 'MMM d')})`;
-      statusColor = 'var(--success)';
-    } else if (daysVariance <= 14) {
-      status = 'at-risk';
-      statusLabel = `At risk: ~${daysVariance}d late (${format(projectedFinishDate, 'MMM d')})`;
-      statusColor = 'var(--warning)';
-    } else {
-      status = 'behind';
-      statusLabel = `Behind schedule (${daysVariance}d late, est. ${format(projectedFinishDate, 'MMM d')})`;
-      statusColor = 'var(--danger)';
-    }
+    status = 'behind';
+    statusLabel = `${paceVariance} tasks behind pace`;
+    statusColor = 'var(--danger)';
   }
 
   // 4. Generate Timeline Intervals
-  // We include: Start Date, Mid Past (if >= 10 days), Today, Mid Future (if >= 10 days), Target Date
-  // Plus any overshoot point if projected finish is past target date
+  // Points: Start Date, Mid Past (if >= 14 days), Today, Mid Future (if >= 14 days), Target Date
   const points: { date: Date; label: string; isToday?: boolean }[] = [];
 
   points.push({ date: startDate, label: `Start (${format(startDate, 'MMM d')})` });
@@ -161,14 +165,7 @@ export function computeBurndown(
 
   points.push({ date: targetDate, label: `Target (${format(targetDate, 'MMM d')})` });
 
-  // If projected completion is significantly past target date, add a forecast end point
-  if (projectedFinishDate && projectedFinishDate > targetDate && differenceInDays(projectedFinishDate, targetDate) >= 7) {
-    points.push({ date: projectedFinishDate, label: `Est. Done (${format(projectedFinishDate, 'MMM d')})` });
-  }
-
-  // 5. Compute Ideal, Remaining, and Projected for each point
-  const totalDays = Math.max(1, differenceInDays(targetDate, startDate));
-
+  // 5. Compute Ideal and Actual Remaining for each point
   const data: BurndownPoint[] = points.map(pt => {
     // Ideal descent from totalTasks at startDate to 0 at targetDate
     let ideal = 0;
@@ -181,30 +178,15 @@ export function computeBurndown(
       ideal = Math.max(0, Math.round(totalTasks * (1 - frac)));
     }
 
-    // Actual remaining for past up to today
+    // Actual remaining up to Today (future points remain undefined so actual line stops at Today)
     let remaining: number | undefined = undefined;
     if (pt.date <= today) {
       if (pt.isToday || pt.date.getTime() === today.getTime()) {
         remaining = remainingTasks;
       } else {
-        // Approximate historical progress proportionally from totalTasks to today's remaining
-        const elapsedFrac = differenceInDays(pt.date, startDate) / daysElapsed;
+        const elapsedFrac = differenceInDays(pt.date, startDate) / Math.max(1, pastSpan);
         const tasksCompletedByThen = Math.round(doneTasks * Math.max(0, Math.min(1, elapsedFrac)));
         remaining = Math.max(remainingTasks, totalTasks - tasksCompletedByThen);
-      }
-    }
-
-    // Projected from today into future (seamlessly connected at today)
-    let projected: number | undefined = undefined;
-    if (pt.date >= today) {
-      if (pt.isToday || pt.date.getTime() === today.getTime()) {
-        projected = remainingTasks;
-      } else if (tasksPerDay > 0) {
-        const daysFromNow = differenceInDays(pt.date, today);
-        const furtherDone = Math.round(tasksPerDay * daysFromNow);
-        projected = Math.max(0, remainingTasks - furtherDone);
-      } else {
-        projected = remainingTasks;
       }
     }
 
@@ -214,7 +196,6 @@ export function computeBurndown(
       isToday: pt.isToday,
       Ideal: ideal,
       Remaining: remaining,
-      Projected: projected,
     };
   });
 
@@ -225,8 +206,10 @@ export function computeBurndown(
     remainingTasks,
     completionRate,
     velocityPerWeek,
-    projectedFinishDate: projectedFinishDate ? format(projectedFinishDate, 'yyyy-MM-dd') : null,
+    idealRemainingToday,
+    paceVariance,
     targetDate: format(targetDate, 'yyyy-MM-dd'),
+    startDate: format(startDate, 'yyyy-MM-dd'),
     status,
     statusLabel,
     statusColor,
