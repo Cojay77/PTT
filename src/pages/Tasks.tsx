@@ -247,6 +247,8 @@ export default function Tasks() {
   const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
   const milestones = useDataStore(s => s.milestones);
 
+  type TaskTab = 'open' | 'overdue' | 'done' | 'all';
+  const [activeTab, setActiveTab] = useState<TaskTab>('open');
   const [view, setView] = useState<'table' | 'kanban'>('table');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -264,9 +266,29 @@ export default function Tasks() {
   const [csvError, setCsvError] = useState<string | null>(null);
 
   const activeTasks = tasks.filter(t => !t.isBacklog);
+  const today = new Date().toISOString().split('T')[0];
+
+  const openTasks = useMemo(() => activeTasks.filter(t => !['done', 'cancelled'].includes(t.status)), [activeTasks]);
+  const overdueTasks = useMemo(() => openTasks.filter(t => t.dueDate && t.dueDate < today), [openTasks, today]);
+  const doneTasks = useMemo(() => activeTasks.filter(t => t.status === 'done'), [activeTasks]);
+
+  const availableStatuses = useMemo(() => {
+    if (activeTab === 'open' || activeTab === 'overdue') {
+      return ['planned', 'ready', 'in-progress', 'blocked', 'waiting'] as TaskStatus[];
+    }
+    if (activeTab === 'done') {
+      return ['done'] as TaskStatus[];
+    }
+    return STATUSES;
+  }, [activeTab]);
+
+  function handleTabChange(tab: TaskTab) {
+    setActiveTab(tab);
+    setFilterStatus('');
+  }
 
   const filtered = useMemo(() => {
-    let list = activeTasks;
+    let list = activeTab === 'open' ? openTasks : activeTab === 'overdue' ? overdueTasks : activeTab === 'done' ? doneTasks : activeTasks;
     if (filterStatus) list = list.filter(t => t.status === filterStatus);
     if (filterPriority) list = list.filter(t => t.priority === filterPriority);
     if (filterOwner) list = list.filter(t => t.owner.toLowerCase().includes(filterOwner.toLowerCase()));
@@ -276,13 +298,13 @@ export default function Tasks() {
       const bv = ((b as unknown as Record<string, unknown>)[sortField] as string) || '';
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-  }, [activeTasks, filterStatus, filterPriority, filterOwner, search, sortField, sortDir]);
+  }, [activeTasks, openTasks, overdueTasks, doneTasks, activeTab, filterStatus, filterPriority, filterOwner, search, sortField, sortDir]);
 
-  const today = new Date().toISOString().split('T')[0];
   const stats = {
     total: activeTasks.length,
-    done: activeTasks.filter(t => t.status === 'done').length,
-    overdue: activeTasks.filter(t => t.dueDate && t.dueDate < today && !['done', 'cancelled'].includes(t.status)).length,
+    open: openTasks.length,
+    done: doneTasks.length,
+    overdue: overdueTasks.length,
     blocked: activeTasks.filter(t => t.status === 'blocked').length,
     inProgress: activeTasks.filter(t => t.status === 'in-progress').length,
   };
@@ -384,7 +406,7 @@ export default function Tasks() {
       <div className="flex items-center gap-3 mb-6">
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-subtitle">{stats.total} tasks · {stats.done} done · {stats.overdue} overdue · {stats.blocked} blocked</p>
+          <p className="page-subtitle">{stats.open} open · {stats.done} done · {stats.overdue} overdue · {stats.blocked} blocked</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <input
@@ -493,16 +515,36 @@ export default function Tasks() {
         </div>
       )}
 
+      {/* Status Tabs (Like Actions) */}
+      <div className="tabs" style={{ marginBottom: 16 }}>
+        {[
+          { id: 'open', label: 'Open', count: stats.open },
+          { id: 'overdue', label: 'Overdue', count: stats.overdue },
+          { id: 'done', label: 'Done', count: stats.done },
+          { id: 'all', label: 'All', count: stats.total },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            className={`tab${activeTab === tab.id ? ' active' : ''}`}
+            onClick={() => handleTabChange(tab.id as TaskTab)}
+          >
+            {tab.label} <span className="tab-count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="filters-bar">
         <div className="input-with-icon" style={{ flex: 1, maxWidth: 320 }}>
           <Search className="input-icon" size={14} />
           <input className="input" placeholder="Search tasks..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="select" style={{ width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}
-        </select>
+        {activeTab !== 'done' && (
+          <select className="select" style={{ width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            {availableStatuses.map(s => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}
+          </select>
+        )}
         <select className="select" style={{ width: 'auto' }} value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
           <option value="">All priorities</option>
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -547,7 +589,7 @@ export default function Tasks() {
                 <th onClick={() => sort('dueDate')} className={sortField === 'dueDate' ? 'sorted' : ''}>Due Date <SortIcon field="dueDate" /></th>
                 <th>Workload</th>
                 <th>Milestone</th>
-                <th style={{ width: 80 }}></th>
+                <th style={{ width: 130 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -555,7 +597,14 @@ export default function Tasks() {
                 const isOverdue = t.dueDate && t.dueDate < today && !['done', 'cancelled'].includes(t.status);
                 const milestone = milestones.find(m => m.id === t.milestoneId);
                 return (
-                  <tr key={t.id} style={{ opacity: t.status === 'cancelled' ? 0.5 : 1 }} onClick={() => setEditTask(t)}>
+                  <tr
+                    key={t.id}
+                    style={{
+                      opacity: t.status === 'cancelled' ? 0.5 : t.status === 'done' ? 0.75 : 1,
+                      background: isOverdue ? 'var(--danger-bg)' : t.status === 'done' ? 'var(--success-bg)' : undefined,
+                    }}
+                    onClick={() => setEditTask(t)}
+                  >
                     <td style={{ width: 36, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
@@ -572,7 +621,7 @@ export default function Tasks() {
                       />
                     </td>
                     <td style={{ maxWidth: 300 }}>
-                      <div style={{ fontWeight: 500 }} className="truncate">{t.title}</div>
+                      <div style={{ fontWeight: 500, textDecoration: t.status === 'done' ? 'line-through' : 'none' }} className="truncate">{t.title}</div>
                       {t.status === 'blocked' && t.blockingReason && (
                         <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>🚫 {t.blockingReason.slice(0, 50)}</div>
                       )}
@@ -598,7 +647,32 @@ export default function Tasks() {
                     </td>
                     <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{milestone?.name || '—'}</td>
                     <td>
-                      <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
+                        {t.status !== 'done' ? (
+                          <button
+                            className="btn btn-xs btn-secondary"
+                            onClick={e => {
+                              e.stopPropagation();
+                              updateTask(t.id, { status: 'done' });
+                            }}
+                            title="Mark as done"
+                            style={{ fontSize: 11, padding: '2px 6px', color: 'var(--success)' }}
+                          >
+                            ✓ Done
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-xs btn-secondary"
+                            onClick={e => {
+                              e.stopPropagation();
+                              updateTask(t.id, { status: 'in-progress' });
+                            }}
+                            title="Reopen task"
+                            style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent)' }}
+                          >
+                            Reopen
+                          </button>
+                        )}
                         <button className="btn-icon btn-ghost" onClick={() => setEditTask(t)}><Edit3 size={13} /></button>
                         <button className="btn-icon btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => setDeleteId(t.id)}><Trash2 size={13} /></button>
                       </div>
@@ -607,7 +681,27 @@ export default function Tasks() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={9}><EmptyState icon={Filter} title="No tasks found" desc="Try adjusting filters or create a new task." /></td></tr>
+                <tr>
+                  <td colSpan={9}>
+                    <EmptyState
+                      icon={Filter}
+                      title={
+                        activeTab === 'open'
+                          ? 'No open tasks'
+                          : activeTab === 'done'
+                          ? 'No completed tasks'
+                          : activeTab === 'overdue'
+                          ? 'No overdue tasks'
+                          : 'No tasks found'
+                      }
+                      desc={
+                        activeTab === 'done'
+                          ? 'Tasks marked as done will appear here.'
+                          : 'Try adjusting filters or create a new task.'
+                      }
+                    />
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

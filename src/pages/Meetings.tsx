@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Edit3, CalendarCheck, CheckSquare, Square,
   Scale, Zap, ListTodo, Link2, X, ChevronDown, ChevronUp,
   Search, Calendar, User, Users, Clock, CheckCircle2, AlertCircle,
-  XCircle, RotateCcw
+  XCircle, RotateCcw, ArrowUpDown
 } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import { useTaskStore } from '../store/useTaskStore';
@@ -1305,6 +1305,9 @@ export default function Meetings() {
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'upcoming' | 'past' | 'cancelled'>('all');
   const [filterLinked, setFilterLinked] = useState<'all' | 'actions' | 'tasks' | 'decisions'>('all');
+  type MeetingSortField = 'date' | 'title' | 'type' | 'status' | 'linked';
+  const [sortField, setSortField] = useState<MeetingSortField>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // Track expanded meeting cards
@@ -1410,8 +1413,31 @@ export default function Meetings() {
   }, [meetings, todayStr]);
 
   const sorted = useMemo(() => {
-    return [...meetings].sort((a, b) => b.date.localeCompare(a.date));
-  }, [meetings]);
+    return [...meetings].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'date') {
+        const da = a.date || '';
+        const db = b.date || '';
+        cmp = da.localeCompare(db);
+      } else if (sortField === 'title') {
+        cmp = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+      } else if (sortField === 'type') {
+        cmp = (a.type || '').localeCompare(b.type || '', undefined, { sensitivity: 'base' });
+      } else if (sortField === 'status') {
+        const sa = a.status || 'scheduled';
+        const sb = b.status || 'scheduled';
+        cmp = sa.localeCompare(sb);
+      } else if (sortField === 'linked') {
+        const countA = parseIdList(a.relatedActionIds).length + parseIdList(a.relatedTaskIds).length + parseIdList(a.relatedDecisionIds).length;
+        const countB = parseIdList(b.relatedActionIds).length + parseIdList(b.relatedTaskIds).length + parseIdList(b.relatedDecisionIds).length;
+        cmp = countA - countB;
+      }
+      if (cmp === 0) {
+        cmp = (b.date || '').localeCompare(a.date || '');
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [meetings, sortField, sortDir]);
 
   const filtered = useMemo(() => {
     return sorted.filter(m => {
@@ -1564,7 +1590,33 @@ export default function Meetings() {
           </select>
         </div>
 
-        {(search || filterStatus !== 'all' || filterType !== 'all' || filterLinked !== 'all') && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Sort by:</label>
+          <select
+            className="select"
+            value={sortField}
+            onChange={e => setSortField(e.target.value as MeetingSortField)}
+            style={{ height: 32, fontSize: 12, padding: '0 8px' }}
+          >
+            <option value="date">Date</option>
+            <option value="title">Title</option>
+            <option value="type">Type</option>
+            <option value="status">Status</option>
+            <option value="linked">Linked Items</option>
+          </select>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+            title={sortDir === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'}
+            style={{ height: 32, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+          >
+            <ArrowUpDown size={13} />
+            <span>{sortDir === 'asc' ? 'Asc' : 'Desc'}</span>
+          </button>
+        </div>
+
+        {(search || filterStatus !== 'all' || filterType !== 'all' || filterLinked !== 'all' || sortField !== 'date' || sortDir !== 'desc') && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
@@ -1572,12 +1624,17 @@ export default function Meetings() {
               setFilterStatus('all');
               setFilterType('all');
               setFilterLinked('all');
+              setSortField('date');
+              setSortDir('desc');
             }}
             style={{ fontSize: 11, height: 30, marginLeft: 'auto' }}
           >
-            Clear Filters
+            Clear Filters & Sort
           </button>
         )}
+        <span style={{ marginLeft: (search || filterStatus !== 'all' || filterType !== 'all' || filterLinked !== 'all' || sortField !== 'date' || sortDir !== 'desc') ? undefined : 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+          {filtered.length} meeting{filtered.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Meetings List */}
