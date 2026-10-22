@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
@@ -16,6 +16,8 @@ import {
 import { exportTasksToCsv, exportRaidToCsv, downloadFile } from '../utils/export';
 import { projectConfigQueries } from '../db/queries';
 import { differenceInDays, parseISO, format } from 'date-fns';
+import { BurndownCard } from '../components/ui/BurndownCard';
+import { computeBurndown } from '../utils/burndown';
 
 const COLORS = ['#4f8ef7', '#7c6af7', '#f74f8e', '#f79a4f', '#4ff7a8', '#f7d14f', '#4fd9f7'];
 const RISK_COLORS: Record<string, string> = {
@@ -249,6 +251,7 @@ export default function Reports() {
   const healthScore = Math.round(radarData.reduce((s, d) => s + d.value, 0) / radarData.length);
   const healthColor = healthScore >= 75 ? 'var(--success)' : healthScore >= 50 ? 'var(--warning)' : 'var(--danger)';
   const healthLabel = healthScore >= 75 ? 'Healthy' : healthScore >= 50 ? 'At Risk' : 'Critical';
+  const burndown = useMemo(() => computeBurndown(tasks, projectConfig, milestones), [tasks, projectConfig, milestones]);
 
   const fmt = (n: number) => new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
@@ -265,6 +268,7 @@ export default function Reports() {
       md += `- **In Progress:** ${inProgressTasks} | **Blocked:** ${blockedTasks} | **Overdue:** ${overdueTasks.length}\n`;
       md += `- **Workload:** ${totalActual}h spent / ${totalEstimated}h estimated (${totalRemaining}h remaining)\n`;
       if (daysToDelivery !== null) md += `- **Days to Delivery:** ${daysToDelivery} days (${projectConfig?.targetDate})\n`;
+      md += `- **Delivery Trajectory:** ${burndown.statusLabel} (Velocity: ${burndown.velocityPerWeek} tasks/week)\n`;
       md += `\n> ${projectConfig?.statusNote || 'Project progressing per current phase priorities.'}\n\n`;
     }
     if (includeSections.milestones) {
@@ -477,6 +481,16 @@ export default function Reports() {
 
           {/* ── Charts ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            {/* Task Burndown & Trajectory */}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <BurndownCard
+                tasks={tasks}
+                config={projectConfig}
+                milestones={milestones}
+                height={240}
+              />
+            </div>
+
             <div className="card">
               <div className="card-header">
                 <Activity size={16} color="var(--accent)" />
@@ -709,6 +723,19 @@ export default function Reports() {
                 </div>
                 <ProgressBar value={completionRate} color={healthColor} />
               </div>
+
+              {activeTasks.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <BurndownCard
+                    tasks={tasks}
+                    config={projectConfig}
+                    milestones={milestones}
+                    height={180}
+                    showKpis={false}
+                    title="Delivery Trajectory & Burndown"
+                  />
+                </div>
+              )}
             </SlideWrapper>
           )}
 
