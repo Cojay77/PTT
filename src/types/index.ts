@@ -451,4 +451,13 @@ export interface PortfolioProject {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  isWorkspaceProject?: boolean;
+  isActiveProject?: boolean;
+  color?: string;
+  score?: number;
+  openTasks?: number;
+  overdueTasks?: number;
+  blockedTasks?: number;
+  criticalRisks?: number;
+  criticalIssues?: number;
 }

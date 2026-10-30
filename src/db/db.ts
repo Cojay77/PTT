@@ -595,6 +595,76 @@ export async function renameProject(id: string, name: string, code?: string): Pr
   }
 }
 
+export async function updateWorkspaceProjectConfig(
+  id: string,
+  updates: {
+    name?: string;
+    code?: string;
+    description?: string;
+    manager?: string;
+    sponsor?: string;
+    startDate?: string;
+    targetDate?: string;
+    currentPhase?: string;
+    status?: string;
+    notes?: string;
+  }
+): Promise<void> {
+  const meta = await getProjectMeta(id);
+  if (!meta) return;
+
+  const applyUpdates = (targetDb: Database) => {
+    targetDb.run(
+      `UPDATE project_config SET
+        name = COALESCE(?, name),
+        code = COALESCE(?, code),
+        description = COALESCE(?, description),
+        manager = COALESCE(?, manager),
+        sponsor = COALESCE(?, sponsor),
+        start_date = COALESCE(?, start_date),
+        target_date = COALESCE(?, target_date),
+        current_phase = COALESCE(?, current_phase),
+        status = COALESCE(?, status),
+        status_note = COALESCE(?, status_note),
+        updated_at = datetime('now')
+      WHERE id = 'main'`,
+      [
+        updates.name !== undefined ? updates.name.trim() : null,
+        updates.code !== undefined ? updates.code.trim() : null,
+        updates.description !== undefined ? updates.description.trim() : null,
+        updates.manager !== undefined ? updates.manager.trim() : null,
+        updates.sponsor !== undefined ? updates.sponsor.trim() : null,
+        updates.startDate !== undefined ? updates.startDate : null,
+        updates.targetDate !== undefined ? updates.targetDate : null,
+        updates.currentPhase !== undefined ? updates.currentPhase.trim() : null,
+        updates.status !== undefined ? updates.status : null,
+        updates.notes !== undefined ? updates.notes.trim() : null,
+      ]
+    );
+  };
+
+  if (id === activeProjectId && db) {
+    applyUpdates(db);
+    await saveDbNow();
+    window.dispatchEvent(new CustomEvent('ptt:data-reloaded'));
+  } else {
+    const bytes = await loadProjectData(id);
+    if (!bytes) return;
+    const d = await openDatabaseFromBytes(bytes);
+    applyUpdates(d);
+    const info = readProjectInfo(d);
+    await putProject({
+      ...meta,
+      name: updates.name !== undefined ? updates.name.trim() || meta.name : meta.name,
+      code: updates.code !== undefined ? updates.code.trim() : meta.code,
+      summary: info.summary,
+      updatedAt: new Date().toISOString(),
+    }, d.export());
+    d.close();
+    emitWorkspaceChanged();
+  }
+}
+
 export async function setProjectColor(id: string, color: string): Promise<void> {
   const meta = await getProjectMeta(id);
   if (!meta) return;

@@ -1,15 +1,23 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Briefcase, Plus, RefreshCw, FolderOpen, Download, Search,
   Calendar, DollarSign, User, CheckCircle2, AlertTriangle, Flame,
   ExternalLink, Edit2, Trash2, ArrowUpDown, Clock, Milestone,
-  Layers, ChevronRight, FileText
+  Layers, ChevronRight, Globe, Building2, Check,
 } from 'lucide-react';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { useDataStore } from '../store/useDataStore';
-import { useTaskStore } from '../store/useTaskStore';
 import type { PortfolioProject, PortfolioProjectStatus, ProjectHealthStatus } from '../types';
 import { ConfirmDialog, ProgressBar } from '../components/ui/shared';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import {
+  loadWorkspacePortfolio,
+  savePortfolioItem,
+  deletePortfolioItem,
+  switchProject,
+  invalidatePortfolioCache,
+} from '../db/portfolioService';
 
 const HEALTH_CONFIG: Record<ProjectHealthStatus, { label: string; color: string; bg: string; icon: typeof CheckCircle2 }> = {
   green: { label: 'Healthy', color: 'var(--success)', bg: 'rgba(34, 197, 94, 0.12)', icon: CheckCircle2 },
@@ -26,38 +34,30 @@ const STATUS_LABELS: Record<PortfolioProjectStatus, string> = {
 };
 
 export default function Portfolio() {
-  const {
-    portfolioProjects,
-    loadPortfolioProjects,
-    createPortfolioProject,
-    updatePortfolioProject,
-    deletePortfolioProject,
-    projectConfig,
-    budgetItems,
-    milestones,
-    risks,
-    issues,
-    decisions,
-  } = useDataStore();
+  const navigate = useNavigate();
+  const { activeId, refresh: refreshWorkspaceStore } = useWorkspaceStore();
+  const { projectConfig } = useDataStore();
 
-  const tasks = useTaskStore((s) => s.tasks);
-
+  const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'cards' | 'roadmap' | 'table'>('cards');
   const [search, setSearch] = useState('');
   const [filterHealth, setFilterHealth] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [sortField, setSortField] = useState<'name' | 'progress' | 'targetDate' | 'budget'>('targetDate');
+  const [filterSource, setFilterSource] = useState<'all' | 'workspace' | 'external'>('all');
+  const [sortField, setSortField] = useState<'targetDate' | 'progress' | 'budget' | 'name' | 'health'>('targetDate');
   const [sortAsc, setSortAsc] = useState(true);
 
-  // Modals
+  // Modals & confirmation
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<PortfolioProject | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState<PortfolioProject | null>(null);
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [scannedFiles, setScannedFiles] = useState<{ fileName: string; filePath: string; modifiedTime: number; sizeBytes: number }[]>([]);
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
   // Form state
+  const [formType, setFormType] = useState<'workspace' | 'external'>('workspace');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -77,84 +77,88 @@ export default function Portfolio() {
 
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 
+  // Load all workspace projects & external initiatives
+  const refreshPortfolioData = useCallback(async (showToastNotice = false) => {
+    setLoading(true);
+    try {
+      const list = await loadWorkspacePortfolio();
+      setPortfolioProjects(list);
+      if (showToastNotice) {
+        setSyncToast(`Portfolio refreshed (${list.length} initiatives active)`);
+        setTimeout(() => setSyncToast(null), 3000);
+      }
+    } catch (err) {
+      console.error('Failed to load workspace portfolio:', err);
+      setSyncToast(`Error loading portfolio: ${String(err)}`);
+      setTimeout(() => setSyncToast(null), 4000);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    loadPortfolioProjects();
-  }, [loadPortfolioProjects]);
+    void refreshPortfolioData();
 
-  // Compute live current project health score & progress
-  const currentProjectCalculations = useMemo(() => {
-    const activeTasks = tasks.filter(t => !t.isBacklog);
-    const totalCount = activeTasks.length;
-    const doneCount = activeTasks.filter(t => t.status === 'done').length;
-    const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
-
-    const today = new Date().toISOString().split('T')[0];
-    const overdueCount = activeTasks.filter(t => t.dueDate && t.dueDate < today && !['done', 'cancelled'].includes(t.status)).length;
-    const blockedCount = activeTasks.filter(t => t.status === 'blocked').length;
-    const critRisks = risks.filter(r => r.severity === 'critical' && !['resolved', 'closed', 'accepted'].includes(r.status)).length;
-    const critIssues = issues.filter(i => i.severity === 'critical' && !['resolved', 'closed'].includes(i.status)).length;
-    const pendingDec = decisions.filter(d => ['proposed', 'under-discussion', 'decision-required'].includes(d.status)).length;
-
-    let score = 100;
-    score -= Math.min(35, overdueCount * 7);
-    score -= Math.min(25, blockedCount * 6);
-    score -= Math.min(25, critRisks * 8);
-    score -= Math.min(20, critIssues * 6);
-    score -= Math.min(15, pendingDec * 4);
-    score = Math.max(0, Math.min(100, score));
-
-    const health: ProjectHealthStatus = score >= 80 ? 'green' : score >= 60 ? 'amber' : 'red';
-
-    const plannedBudget = budgetItems.reduce((acc, b) => acc + (b.plannedAmount || 0), 0);
-    const actualBudget = budgetItems.reduce((acc, b) => acc + (b.actualAmount || 0), 0);
-
-    const nextM = milestones.find(m => m.status !== 'completed' && m.targetDate >= today) || milestones[0];
-    const keyMilestoneStr = nextM ? `${nextM.name} (${nextM.targetDate || 'No date'})` : '';
-
-    return { progress, health, score, plannedBudget, actualBudget, keyMilestoneStr };
-  }, [tasks, risks, issues, decisions, budgetItems, milestones]);
-
-  // Sync current active project into portfolio
-  const handleSyncCurrentProject = () => {
-    if (!projectConfig) return;
-    const existing = portfolioProjects.find(
-      p => p.code && projectConfig.code ? p.code.toLowerCase() === projectConfig.code.toLowerCase() : p.name.toLowerCase() === (projectConfig.name || '').toLowerCase()
-    );
-
-    const payload: Partial<PortfolioProject> = {
-      name: projectConfig.name || 'Current Project',
-      code: projectConfig.code || '',
-      description: projectConfig.description || '',
-      status: 'active',
-      health: currentProjectCalculations.health,
-      manager: projectConfig.manager || '',
-      sponsor: projectConfig.sponsor || '',
-      startDate: projectConfig.startDate || '',
-      targetDate: projectConfig.targetDate || '',
-      currentPhase: projectConfig.currentPhase || 'Execution',
-      progressPercent: currentProjectCalculations.progress,
-      budgetPlanned: currentProjectCalculations.plannedBudget,
-      budgetActual: currentProjectCalculations.actualBudget,
-      currency: budgetItems[0]?.currency || 'EUR',
-      keyMilestone: currentProjectCalculations.keyMilestoneStr,
-      notes: projectConfig.statusNote || 'Synced from active project database.',
+    const handleWorkspaceChanged = () => {
+      void refreshPortfolioData();
     };
 
-    if (existing) {
-      updatePortfolioProject(existing.id, payload);
-      setSyncToast(`Updated "${payload.name}" in portfolio`);
-    } else {
-      createPortfolioProject(payload);
-      setSyncToast(`Added "${payload.name}" to portfolio`);
-    }
+    window.addEventListener('ptt:workspace-changed', handleWorkspaceChanged);
+    window.addEventListener('ptt:data-reloaded', handleWorkspaceChanged);
+    return () => {
+      window.removeEventListener('ptt:workspace-changed', handleWorkspaceChanged);
+      window.removeEventListener('ptt:data-reloaded', handleWorkspaceChanged);
+    };
+  }, [refreshPortfolioData]);
 
-    setTimeout(() => setSyncToast(null), 3500);
+  // Switch to Project
+  const handleSwitchProject = async (p: PortfolioProject) => {
+    if (p.isWorkspaceProject) {
+      setSyncToast(`Switching workspace to "${p.name}"...`);
+      try {
+        if (p.id !== activeId) {
+          await switchProject(p.id);
+          await refreshWorkspaceStore();
+        }
+        setSyncToast(`Switched active workspace to "${p.name}"`);
+        await refreshPortfolioData();
+      } catch (err) {
+        console.error('Error switching project:', err);
+        setSyncToast(`Failed to switch project: ${String(err)}`);
+      } finally {
+        setTimeout(() => setSyncToast(null), 3000);
+      }
+    } else if (p.filePath && isElectron && window.electronAPI) {
+      try {
+        const res = await window.electronAPI.openFileByPath(p.filePath);
+        if (res) {
+          setSyncToast(`Switched project to ${res.fileName}`);
+          setTimeout(() => setSyncToast(null), 3000);
+        }
+      } catch (err) {
+        console.error('Error switching project file:', err);
+      }
+    }
+  };
+
+  // Switch and navigate to Project Overview
+  const handleOpenProjectOverview = async (p: PortfolioProject) => {
+    try {
+      if (p.id !== activeId && p.isWorkspaceProject) {
+        await switchProject(p.id);
+        await refreshWorkspaceStore();
+      }
+      navigate('/overview');
+    } catch (err) {
+      console.error('Failed to open project:', err);
+    }
   };
 
   // Open Edit Modal
   const handleOpenEdit = (p?: PortfolioProject) => {
     if (p) {
       setSelectedProject(p);
+      setFormType(p.isWorkspaceProject ? 'workspace' : 'external');
       setFormName(p.name);
       setFormCode(p.code);
       setFormDesc(p.description);
@@ -173,6 +177,7 @@ export default function Portfolio() {
       setFormNotes(p.notes);
     } else {
       setSelectedProject(null);
+      setFormType('workspace');
       setFormName('');
       setFormCode('');
       setFormDesc('');
@@ -194,7 +199,7 @@ export default function Portfolio() {
   };
 
   // Save Project Form
-  const handleSaveProject = (e: React.FormEvent) => {
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
@@ -215,14 +220,38 @@ export default function Portfolio() {
       currency: formCurrency,
       keyMilestone: formKeyMilestone.trim(),
       notes: formNotes.trim(),
+      isWorkspaceProject: selectedProject ? selectedProject.isWorkspaceProject : formType === 'workspace',
     };
 
-    if (selectedProject) {
-      updatePortfolioProject(selectedProject.id, payload);
-    } else {
-      createPortfolioProject(payload);
+    try {
+      await savePortfolioItem(payload, selectedProject);
+      setSyncToast(selectedProject ? `Updated "${payload.name}"` : `Added "${payload.name}" to portfolio`);
+      setEditModalOpen(false);
+      await refreshPortfolioData();
+      await refreshWorkspaceStore();
+    } catch (err) {
+      console.error('Failed to save project:', err);
+      setSyncToast(`Failed to save: ${String(err)}`);
+    } finally {
+      setTimeout(() => setSyncToast(null), 3500);
     }
-    setEditModalOpen(false);
+  };
+
+  // Delete Project Confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmProject) return;
+    try {
+      await deletePortfolioItem(deleteConfirmProject);
+      setSyncToast(`Removed "${deleteConfirmProject.name}" from portfolio`);
+      setDeleteConfirmProject(null);
+      await refreshPortfolioData();
+      await refreshWorkspaceStore();
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setSyncToast(`Failed to delete: ${String(err)}`);
+    } finally {
+      setTimeout(() => setSyncToast(null), 3500);
+    }
   };
 
   // Scan Folder in Electron
@@ -241,25 +270,15 @@ export default function Portfolio() {
     }
   }, []);
 
-  // Switch to Project in Electron
-  const handleSwitchProject = async (filePath: string) => {
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      try {
-        const res = await window.electronAPI.openFileByPath(filePath);
-        if (res) {
-          setSyncToast(`Switched project to ${res.fileName}`);
-          setTimeout(() => setSyncToast(null), 3000);
-        }
-      } catch (err) {
-        console.error('Error switching project:', err);
-      }
-    }
-  };
-
-  // Export Portfolio
+  // Export Portfolio CSV
   const handleExportCSV = () => {
-    const headers = ['Code', 'Name', 'Status', 'Health', 'Manager', 'Sponsor', 'Phase', 'Progress %', 'Planned Budget', 'Actual Spend', 'Currency', 'Start Date', 'Target Date', 'Key Milestone'];
-    const rows = portfolioProjects.map(p => [
+    const headers = [
+      'Type', 'Code', 'Name', 'Status', 'Health', 'Manager', 'Sponsor',
+      'Phase', 'Progress %', 'Planned Budget', 'Actual Spend', 'Currency',
+      'Start Date', 'Target Date', 'Key Milestone', 'Notes'
+    ];
+    const rows = filteredProjects.map(p => [
+      p.isWorkspaceProject ? 'Workspace Project' : 'External Initiative',
       `"${p.code}"`,
       `"${p.name.replace(/"/g, '""')}"`,
       p.status,
@@ -273,7 +292,8 @@ export default function Portfolio() {
       p.currency,
       p.startDate,
       p.targetDate,
-      `"${p.keyMilestone.replace(/"/g, '""')}"`
+      `"${p.keyMilestone.replace(/"/g, '""')}"`,
+      `"${p.notes.replace(/"/g, '""')}"`
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -292,6 +312,8 @@ export default function Portfolio() {
       .filter(p => {
         if (filterHealth !== 'all' && p.health !== filterHealth) return false;
         if (filterStatus !== 'all' && p.status !== filterStatus) return false;
+        if (filterSource === 'workspace' && !p.isWorkspaceProject) return false;
+        if (filterSource === 'external' && p.isWorkspaceProject) return false;
         if (search.trim()) {
           const q = search.toLowerCase();
           const matchName = p.name.toLowerCase().includes(q);
@@ -308,10 +330,16 @@ export default function Portfolio() {
         if (sortField === 'name') cmp = a.name.localeCompare(b.name);
         else if (sortField === 'progress') cmp = a.progressPercent - b.progressPercent;
         else if (sortField === 'budget') cmp = a.budgetPlanned - b.budgetPlanned;
-        else if (sortField === 'targetDate') cmp = (a.targetDate || '9999').localeCompare(b.targetDate || '9999');
+        else if (sortField === 'health') {
+          const weight = { red: 0, amber: 1, green: 2 };
+          cmp = weight[a.health] - weight[b.health];
+        } else {
+          // targetDate
+          cmp = (a.targetDate || '9999').localeCompare(b.targetDate || '9999');
+        }
         return sortAsc ? cmp : -cmp;
       });
-  }, [portfolioProjects, filterHealth, filterStatus, search, sortField, sortAsc]);
+  }, [portfolioProjects, filterHealth, filterStatus, filterSource, search, sortField, sortAsc]);
 
   // Aggregate Portfolio Metrics
   const stats = useMemo(() => {
@@ -324,13 +352,13 @@ export default function Portfolio() {
     const totalPlanned = portfolioProjects.reduce((acc, p) => acc + (p.budgetPlanned || 0), 0);
     const totalActual = portfolioProjects.reduce((acc, p) => acc + (p.budgetActual || 0), 0);
     const variance = totalPlanned > 0 ? Math.round(((totalActual - totalPlanned) / totalPlanned) * 100) : 0;
-
     const avgProgress = total > 0 ? Math.round(portfolioProjects.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / total) : 0;
+    const workspaceCount = portfolioProjects.filter(p => p.isWorkspaceProject).length;
 
-    return { total, active, green, amber, red, totalPlanned, totalActual, variance, avgProgress };
+    return { total, active, green, amber, red, totalPlanned, totalActual, variance, avgProgress, workspaceCount };
   }, [portfolioProjects]);
 
-  // Compute timeline boundaries for Roadmap View
+  // Timeline boundaries for Roadmap View
   const roadmapBounds = useMemo(() => {
     const validDates = portfolioProjects
       .flatMap(p => [p.startDate, p.targetDate])
@@ -345,9 +373,12 @@ export default function Portfolio() {
 
     const min = Math.min(...validDates);
     const max = Math.max(...validDates);
-    // Add 15 days margin on both sides
     return { min: min - 15 * 86400000, max: max + 15 * 86400000 };
   }, [portfolioProjects]);
+
+  const activeProjectEntry = useMemo(() => {
+    return portfolioProjects.find(p => p.isActiveProject || p.id === activeId);
+  }, [portfolioProjects, activeId]);
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 40 }}>
@@ -373,11 +404,16 @@ export default function Portfolio() {
               <Briefcase size={20} />
             </div>
             <div>
-              <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                Multi-Project Portfolio
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                  Multi-Project Portfolio
+                </h1>
+                <span className="badge badge-sm" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', fontWeight: 600 }}>
+                  Live Workspace
+                </span>
+              </div>
               <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                Cross-initiative governance, resource balance & executive status tracking
+                Cross-project governance, live status tracking & aggregate budget balance across all workspace initiatives
               </p>
             </div>
           </div>
@@ -386,23 +422,28 @@ export default function Portfolio() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={handleSyncCurrentProject}
-            title="Automatically update or register currently open project with live metrics"
+            onClick={() => {
+              invalidatePortfolioCache();
+              void refreshPortfolioData(true);
+            }}
+            disabled={loading}
+            title="Reload live health, tasks, and budget extraction from all workspace databases"
           >
-            <RefreshCw size={14} /> Sync Current Project
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh All Projects</span>
           </button>
 
           {isElectron && (
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleScanFolder}
-              title="Scan workspace directory for .ptt database files"
+              title="Scan directory for external .ptt project databases"
             >
               <FolderOpen size={14} /> Scan Folder
             </button>
           )}
 
-          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} title="Export portfolio summary to CSV">
+          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} title="Export entire multi-project portfolio to CSV">
             <Download size={14} /> Export CSV
           </button>
 
@@ -427,7 +468,7 @@ export default function Portfolio() {
               {stats.total}
             </span>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              ({stats.active} active)
+              ({stats.active} active · {stats.workspaceCount} in workspace)
             </span>
           </div>
           <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
@@ -443,7 +484,7 @@ export default function Portfolio() {
             </span>
             <CheckCircle2 size={16} color="var(--success)" />
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
             <span style={{ padding: '4px 10px', borderRadius: 6, background: HEALTH_CONFIG.green.bg, color: HEALTH_CONFIG.green.color, fontWeight: 700, fontSize: 'var(--text-sm)' }}>
               🟢 {stats.green} Healthy
             </span>
@@ -455,7 +496,7 @@ export default function Portfolio() {
             </span>
           </div>
           <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: stats.red > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-            {stats.red > 0 ? `⚠️ ${stats.red} project(s) require executive intervention` : '✓ No critical roadblocks flagged'}
+            {stats.red > 0 ? `⚠️ ${stats.red} project(s) require executive intervention` : '✓ All initiatives within acceptable risk thresholds'}
           </div>
         </div>
 
@@ -463,7 +504,7 @@ export default function Portfolio() {
         <div className="card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Aggregate Budget & Spend
+              Aggregate Portfolio Budget
             </span>
             <DollarSign size={16} color="var(--info)" />
           </div>
@@ -481,27 +522,37 @@ export default function Portfolio() {
               background: stats.variance > 0 ? 'var(--danger-bg)' : 'var(--success-bg)',
               color: stats.variance > 0 ? 'var(--danger)' : 'var(--success)'
             }}>
-              {stats.variance > 0 ? `+${stats.variance}% over` : `${stats.variance}% variance`}
+              {stats.variance > 0 ? `+${stats.variance}% over plan` : `${stats.variance}% variance`}
             </span>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              against committed CAPEX/OPEX
+              across all initiatives
             </span>
           </div>
         </div>
 
         {/* Current Active Workspace Indicator */}
-        <div className="card" style={{ padding: '16px 20px', borderColor: 'var(--accent-glow)', background: 'linear-gradient(135deg, var(--bg-surface) 0%, var(--accent-soft) 100%)' }}>
+        <div className="card" style={{ padding: '16px 20px', borderColor: 'var(--accent)', background: 'linear-gradient(135deg, var(--bg-surface) 0%, var(--accent-soft) 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Active Workspace
+              Currently Open Project
             </span>
-            <span className="badge badge-sm" style={{ background: 'var(--accent)', color: '#fff' }}>Open Now</span>
+            <span className="badge badge-sm" style={{ background: 'var(--accent)', color: '#fff', fontWeight: 600 }}>Active</span>
           </div>
           <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {projectConfig?.name || 'Unnamed Project'}
+            {activeProjectEntry?.name || projectConfig?.name || 'My Project'}
           </div>
-          <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-            Phase: <strong>{projectConfig?.currentPhase || 'Execution'}</strong> · Score: <strong>{currentProjectCalculations.score}/100</strong>
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+              Phase: <strong>{activeProjectEntry?.currentPhase || projectConfig?.currentPhase || 'Execution'}</strong>
+              {activeProjectEntry?.score !== undefined && ` · Health: ${activeProjectEntry.score}/100`}
+            </span>
+            <button
+              className="btn btn-ghost btn-xs"
+              style={{ color: 'var(--accent)', fontWeight: 600, padding: 0 }}
+              onClick={() => navigate('/overview')}
+            >
+              Open <ChevronRight size={13} />
+            </button>
           </div>
         </div>
       </div>
@@ -514,7 +565,7 @@ export default function Portfolio() {
             <Search size={14} style={{ position: 'absolute', left: 10, top: 9, color: 'var(--text-muted)' }} />
             <input
               type="text"
-              placeholder="Search initiatives, managers, codes..."
+              placeholder="Search initiatives, pilots, codes..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="form-input"
@@ -551,6 +602,19 @@ export default function Portfolio() {
             <option value="planning">Planning</option>
             <option value="on-hold">On Hold</option>
             <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          {/* Source Filter */}
+          <select
+            value={filterSource}
+            onChange={(e) => setFilterSource(e.target.value as typeof filterSource)}
+            className="form-select"
+            style={{ height: 32, fontSize: 'var(--text-xs)', padding: '0 8px' }}
+          >
+            <option value="all">All Sources</option>
+            <option value="workspace">Workspace Projects Only</option>
+            <option value="external">External Initiatives Only</option>
           </select>
         </div>
 
@@ -567,6 +631,7 @@ export default function Portfolio() {
               <option value="targetDate">Target Date</option>
               <option value="progress">Progress %</option>
               <option value="budget">Budget</option>
+              <option value="health">Health Risk</option>
               <option value="name">Name</option>
             </select>
             <button
@@ -635,27 +700,41 @@ export default function Portfolio() {
             {filteredProjects.map((p) => {
               const startT = p.startDate ? parseISO(p.startDate).getTime() : roadmapBounds.min;
               const endT = p.targetDate ? parseISO(p.targetDate).getTime() : roadmapBounds.max;
-              const totalDuration = roadmapBounds.max - roadmapBounds.min;
+              const totalDuration = Math.max(1, roadmapBounds.max - roadmapBounds.min);
 
               const leftPct = Math.max(0, Math.min(95, ((startT - roadmapBounds.min) / totalDuration) * 100));
               const widthPct = Math.max(5, Math.min(100 - leftPct, ((endT - startT) / totalDuration) * 100));
               const healthStyle = HEALTH_CONFIG[p.health];
+              const isActive = p.isActiveProject || p.id === activeId;
 
               return (
-                <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '240px 1fr', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div>
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '260px 1fr', alignItems: 'center',
+                    padding: '10px 0', borderBottom: '1px solid var(--border)',
+                    background: isActive ? 'var(--accent-soft)' : 'transparent',
+                    borderRadius: 4,
+                  }}
+                >
+                  <div style={{ paddingLeft: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: healthStyle.color, flexShrink: 0 }} />
                       <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {p.name}
                       </strong>
+                      {isActive && (
+                        <span className="badge badge-sm" style={{ background: 'var(--accent)', color: '#fff', fontSize: 10, padding: '1px 5px' }}>
+                          Open
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 14 }}>
                       {p.code ? `${p.code} · ` : ''}{p.currentPhase || 'Active'} · {p.progressPercent}%
                     </div>
                   </div>
 
-                  <div style={{ position: 'relative', height: 28, background: 'var(--bg-base)', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', height: 28, background: 'var(--bg-base)', borderRadius: 6, overflow: 'hidden', marginRight: 8 }}>
                     <div
                       style={{
                         position: 'absolute',
@@ -669,9 +748,13 @@ export default function Portfolio() {
                         alignItems: 'center',
                         padding: '0 8px',
                         overflow: 'hidden',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        cursor: p.isWorkspaceProject ? 'pointer' : 'default',
                       }}
-                      title={`${p.name}: ${p.startDate || '?'} → ${p.targetDate || '?'}`}
+                      onClick={() => {
+                        if (p.isWorkspaceProject) void handleOpenProjectOverview(p);
+                      }}
+                      title={`${p.name}: ${p.startDate || '?'} → ${p.targetDate || '?'}${p.isWorkspaceProject ? ' (Click to open)' : ''}`}
                     >
                       {/* Inner Progress fill */}
                       <div style={{
@@ -697,8 +780,7 @@ export default function Portfolio() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
           {filteredProjects.map((p) => {
             const healthStyle = HEALTH_CONFIG[p.health];
-            const isOverBudget = p.budgetActual > p.budgetPlanned && p.budgetPlanned > 0;
-            const variance = p.budgetPlanned > 0 ? Math.round(((p.budgetActual - p.budgetPlanned) / p.budgetPlanned) * 100) : 0;
+            const isActive = p.isActiveProject || p.id === activeId;
 
             let daysLeft: number | null = null;
             if (p.targetDate) {
@@ -712,12 +794,17 @@ export default function Portfolio() {
                 style={{
                   display: 'flex', flexDirection: 'column', padding: '20px',
                   transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                  borderTop: `3px solid ${healthStyle.color}`
+                  borderTop: `3px solid ${healthStyle.color}`,
+                  borderColor: isActive ? 'var(--accent)' : undefined,
+                  boxShadow: isActive ? '0 0 0 1px var(--accent)' : undefined,
                 }}
               >
-                {/* Card Top: Code, Health & Status */}
+                {/* Card Top: Code, Source & Health */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {p.color && (
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color }} />
+                    )}
                     {p.code && (
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
                         {p.code}
@@ -726,6 +813,19 @@ export default function Portfolio() {
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
                       {STATUS_LABELS[p.status]}
                     </span>
+                    {isActive ? (
+                      <span className="badge badge-sm" style={{ background: 'var(--accent)', color: '#fff', fontSize: 10, padding: '1px 6px' }}>
+                        Open Now
+                      </span>
+                    ) : p.isWorkspaceProject ? (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Building2 size={10} /> Workspace
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Globe size={10} /> External
+                      </span>
+                    )}
                   </div>
 
                   <span style={{
@@ -746,13 +846,15 @@ export default function Portfolio() {
                   margin: '0 0 16px 0', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)',
                   display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: 32
                 }}>
-                  {p.description || 'No project description provided.'}
+                  {p.description || 'No initiative description provided.'}
                 </p>
 
                 {/* Progress Bar */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Completion Progress</span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Completion Progress {p.openTasks !== undefined ? `(${p.openTasks} tasks open)` : ''}
+                    </span>
                     <strong style={{ color: 'var(--text-primary)' }}>{p.progressPercent}%</strong>
                   </div>
                   <ProgressBar value={p.progressPercent} color={healthStyle.color} />
@@ -805,26 +907,45 @@ export default function Portfolio() {
 
                 {/* Card Footer: Actions */}
                 <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                  {p.filePath && isElectron ? (
-                    <button
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => handleSwitchProject(p.filePath!)}
-                      style={{ color: 'var(--accent)', fontWeight: 600 }}
-                      title={`Switch to ${p.filePath}`}
-                    >
-                      <ExternalLink size={12} /> Switch to Project
-                    </button>
-                  ) : (
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {p.currentPhase || 'Standalone Project'}
-                    </span>
-                  )}
+                  <div>
+                    {p.isWorkspaceProject ? (
+                      isActive ? (
+                        <button
+                          className="btn btn-secondary btn-xs"
+                          onClick={() => handleOpenProjectOverview(p)}
+                          style={{ color: 'var(--accent)', fontWeight: 600 }}
+                        >
+                          View Overview <ChevronRight size={12} />
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-primary btn-xs"
+                          onClick={() => handleSwitchProject(p)}
+                          title={`Switch active workspace to ${p.name}`}
+                        >
+                          <ExternalLink size={12} /> Switch to Project
+                        </button>
+                      )
+                    ) : p.filePath && isElectron ? (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => handleSwitchProject(p)}
+                        style={{ color: 'var(--accent)', fontWeight: 600 }}
+                      >
+                        <ExternalLink size={12} /> Open File
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {p.currentPhase || 'Strategic Initiative'}
+                      </span>
+                    )}
+                  </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button className="btn btn-ghost btn-xs" onClick={() => handleOpenEdit(p)} title="Edit Project">
+                    <button className="btn btn-ghost btn-xs" onClick={() => handleOpenEdit(p)} title="Edit Initiative">
                       <Edit2 size={13} />
                     </button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => setDeleteConfirmId(p.id)} title="Delete Project">
+                    <button className="btn btn-ghost btn-xs" onClick={() => setDeleteConfirmProject(p)} title="Delete Initiative">
                       <Trash2 size={13} color="var(--danger)" />
                     </button>
                   </div>
@@ -845,26 +966,40 @@ export default function Portfolio() {
                 <th>Initiative Name</th>
                 <th style={{ width: 110 }}>Health</th>
                 <th style={{ width: 100 }}>Status</th>
-                <th style={{ width: 120 }}>Progress</th>
+                <th style={{ width: 130 }}>Progress</th>
                 <th style={{ width: 130 }}>Manager</th>
                 <th style={{ width: 110 }}>Target Date</th>
                 <th style={{ width: 150 }}>Budget (Spend / Plan)</th>
-                <th style={{ width: 90, textAlign: 'right' }}>Actions</th>
+                <th style={{ width: 120, textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredProjects.map((p) => {
                 const healthStyle = HEALTH_CONFIG[p.health];
+                const isActive = p.isActiveProject || p.id === activeId;
+
                 return (
-                  <tr key={p.id}>
+                  <tr key={p.id} style={{ background: isActive ? 'var(--accent-soft)' : undefined }}>
                     <td>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
-                        {p.code || '—'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {p.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color }} />}
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+                          {p.code || '—'}
+                        </span>
+                      </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.currentPhase}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</div>
+                        {isActive && (
+                          <span className="badge badge-sm" style={{ background: 'var(--accent)', color: '#fff', fontSize: 10, padding: '1px 5px' }}>
+                            Open
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {p.currentPhase} {p.isWorkspaceProject ? '· Workspace Project' : '· External Initiative'}
+                      </div>
                     </td>
                     <td>
                       <span style={{
@@ -894,10 +1029,21 @@ export default function Portfolio() {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {p.isWorkspaceProject && (
+                          isActive ? (
+                            <button className="btn btn-ghost btn-xs" onClick={() => handleOpenProjectOverview(p)} title="Open Project Overview">
+                              <ChevronRight size={14} color="var(--accent)" />
+                            </button>
+                          ) : (
+                            <button className="btn btn-ghost btn-xs" onClick={() => handleSwitchProject(p)} title="Switch to this project">
+                              <ExternalLink size={13} color="var(--accent)" />
+                            </button>
+                          )
+                        )}
                         <button className="btn btn-ghost btn-xs" onClick={() => handleOpenEdit(p)} title="Edit">
                           <Edit2 size={12} />
                         </button>
-                        <button className="btn btn-ghost btn-xs" onClick={() => setDeleteConfirmId(p.id)} title="Delete">
+                        <button className="btn btn-ghost btn-xs" onClick={() => setDeleteConfirmProject(p)} title="Delete">
                           <Trash2 size={12} color="var(--danger)" />
                         </button>
                       </div>
@@ -911,12 +1057,12 @@ export default function Portfolio() {
       )}
 
       {/* Empty State */}
-      {filteredProjects.length === 0 && (
+      {filteredProjects.length === 0 && !loading && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
           <Briefcase size={36} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
           <h3 style={{ margin: '0 0 6px 0', color: 'var(--text-primary)' }}>No Initiatives Found</h3>
           <p style={{ margin: '0 0 16px 0', fontSize: 'var(--text-sm)' }}>
-            No projects matched your filters. Register a new initiative or click "Sync Current Project".
+            No projects matched your filters. Create a new workspace project or register an executive initiative.
           </p>
           <button className="btn btn-primary btn-sm" onClick={() => handleOpenEdit()}>
             <Plus size={14} /> Add Initiative
@@ -930,12 +1076,45 @@ export default function Portfolio() {
           <div className="modal-content" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>
-                {selectedProject ? 'Edit Initiative' : 'Add New Portfolio Initiative'}
+                {selectedProject
+                  ? `Edit ${selectedProject.isWorkspaceProject ? 'Workspace Project' : 'External Initiative'}`
+                  : 'Add New Portfolio Initiative'}
               </h2>
               <button className="btn btn-ghost btn-sm" onClick={() => setEditModalOpen(false)}>✕</button>
             </div>
 
             <form onSubmit={handleSaveProject}>
+              {!selectedProject && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16, background: 'var(--bg-base)', padding: 4, borderRadius: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('workspace')}
+                    style={{
+                      flex: 1, padding: '8px 12px', border: 'none', borderRadius: 6,
+                      background: formType === 'workspace' ? 'var(--accent)' : 'transparent',
+                      color: formType === 'workspace' ? '#fff' : 'var(--text-secondary)',
+                      fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    <Building2 size={14} /> Create as Workspace Project (full .ptt database)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('external')}
+                    style={{
+                      flex: 1, padding: '8px 12px', border: 'none', borderRadius: 6,
+                      background: formType === 'external' ? 'var(--accent)' : 'transparent',
+                      color: formType === 'external' ? '#fff' : 'var(--text-secondary)',
+                      fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    <Globe size={14} /> Track as External Initiative (governance only)
+                  </button>
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Project Name *</label>
@@ -967,7 +1146,7 @@ export default function Portfolio() {
                   rows={2}
                   value={formDesc}
                   onChange={(e) => setFormDesc(e.target.value)}
-                  placeholder="Key strategic objective and deliverables..."
+                  placeholder="Key strategic objectives and executive deliverables..."
                 />
               </div>
 
@@ -993,6 +1172,8 @@ export default function Portfolio() {
                     className="form-select"
                     value={formHealth}
                     onChange={(e) => setFormHealth(e.target.value as ProjectHealthStatus)}
+                    disabled={selectedProject?.isWorkspaceProject}
+                    title={selectedProject?.isWorkspaceProject ? 'Health is computed dynamically from workspace tasks, risks & issues' : ''}
                   >
                     <option value="green">🟢 Healthy (On Track)</option>
                     <option value="amber">🟡 At Risk (Attention)</option>
@@ -1064,7 +1245,9 @@ export default function Portfolio() {
                     max="100"
                     value={formProgress}
                     onChange={(e) => setFormProgress(Number(e.target.value))}
+                    disabled={selectedProject?.isWorkspaceProject}
                     style={{ width: '100%', marginTop: 8 }}
+                    title={selectedProject?.isWorkspaceProject ? 'Progress is calculated from workspace task completion' : ''}
                   />
                 </div>
               </div>
@@ -1079,6 +1262,8 @@ export default function Portfolio() {
                     className="form-input"
                     value={formBudgetPlanned}
                     onChange={(e) => setFormBudgetPlanned(Number(e.target.value))}
+                    disabled={selectedProject?.isWorkspaceProject}
+                    title={selectedProject?.isWorkspaceProject ? 'Budget is extracted from project budget items' : ''}
                   />
                 </div>
 
@@ -1091,6 +1276,8 @@ export default function Portfolio() {
                     className="form-input"
                     value={formBudgetActual}
                     onChange={(e) => setFormBudgetActual(Number(e.target.value))}
+                    disabled={selectedProject?.isWorkspaceProject}
+                    title={selectedProject?.isWorkspaceProject ? 'Spend is extracted from project budget items' : ''}
                   />
                 </div>
 
@@ -1110,23 +1297,42 @@ export default function Portfolio() {
               </div>
 
               <div className="form-group" style={{ marginBottom: 16 }}>
-                <label className="form-label">Next Key Milestone</label>
+                <label className="form-label">Key Milestone</label>
                 <input
                   type="text"
                   className="form-input"
                   value={formKeyMilestone}
                   onChange={(e) => setFormKeyMilestone(e.target.value)}
                   placeholder="e.g. UAT Signoff (Nov 15)"
+                  disabled={selectedProject?.isWorkspaceProject}
+                  title={selectedProject?.isWorkspaceProject ? 'Upcoming milestone is read automatically from project milestones' : ''}
                 />
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {selectedProject ? 'Save Changes' : 'Create Initiative'}
-                </button>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  {selectedProject?.isWorkspaceProject && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setEditModalOpen(false);
+                        void handleOpenProjectOverview(selectedProject);
+                      }}
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      <ExternalLink size={13} /> Open & Detailed Edit in Workspace
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {selectedProject ? 'Save Changes' : 'Create Initiative'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1166,7 +1372,7 @@ export default function Portfolio() {
                     <button
                       className="btn btn-primary btn-xs"
                       onClick={() => {
-                        handleSwitchProject(f.filePath);
+                        void handleSwitchProject({ filePath: f.filePath, isWorkspaceProject: false, name: f.fileName } as PortfolioProject);
                         setScanModalOpen(false);
                       }}
                     >
@@ -1175,7 +1381,7 @@ export default function Portfolio() {
                     <button
                       className="btn btn-secondary btn-xs"
                       onClick={() => {
-                        createPortfolioProject({
+                        void savePortfolioItem({
                           name: f.fileName.replace(/\.ptt$/i, ''),
                           code: f.fileName.slice(0, 4).toUpperCase(),
                           filePath: f.filePath,
@@ -1185,6 +1391,7 @@ export default function Portfolio() {
                         });
                         setSyncToast(`Added ${f.fileName} to portfolio`);
                         setTimeout(() => setSyncToast(null), 3000);
+                        void refreshPortfolioData();
                       }}
                     >
                       Add to Portfolio
@@ -1210,14 +1417,11 @@ export default function Portfolio() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      {deleteConfirmId && (
+      {deleteConfirmProject && (
         <ConfirmDialog
-          message="Are you sure you want to remove this project from your portfolio register?"
-          onConfirm={() => {
-            deletePortfolioProject(deleteConfirmId);
-            setDeleteConfirmId(null);
-          }}
-          onCancel={() => setDeleteConfirmId(null)}
+          message={`Are you sure you want to remove "${deleteConfirmProject.name}" from your portfolio?${deleteConfirmProject.isWorkspaceProject ? ' (This will delete the project from your workspace).' : ''}`}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteConfirmProject(null)}
         />
       )}
     </div>

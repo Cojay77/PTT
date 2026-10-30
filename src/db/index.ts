@@ -6,7 +6,7 @@ export {
   isReadOnlyProject, getActiveLockInfo, setReadOnlyMode,
   // Multi-project workspace
   getActiveProjectId, isFreshWorkspace, flushPendingSave, listWorkspaceProjects, mapWorkspaceProjects,
-  switchProject, createProject, importProjectFromBytes, duplicateProject, renameProject,
+  switchProject, createProject, importProjectFromBytes, duplicateProject, renameProject, updateWorkspaceProjectConfig,
   setProjectColor, deleteProject, reloadActiveProjectFromStorage, exportProjectFile,
   exportWorkspaceBundle, importWorkspaceBundle, openWorkspaceBundleDialog,
   resetWorkspace, resetCurrentProject, restoreIntoCurrentProject,
