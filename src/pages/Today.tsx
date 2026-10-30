@@ -945,8 +945,8 @@ export default function Today() {
 
       {/* ── Identity Configuration Modal ───────────────────────────────── */}
       {identityModalOpen && (
-        <div className="modal-overlay" onClick={() => setIdentityModalOpen(false)}>
-          <div className="modal modal-md" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal modal-md">
             <div className="modal-header">
               <div className="flex items-center gap-2">
                 <User size={18} color="var(--accent)" />

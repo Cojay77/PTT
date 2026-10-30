@@ -414,7 +414,7 @@ export default function Projects() {
 
       {/* Edit Project Modal */}
       {editingProject && (
-        <div className="ws-backdrop" onMouseDown={() => setEditingProject(null)}>
+        <div className="ws-backdrop">
           <form
             className="ws-dialog"
             onMouseDown={(e) => e.stopPropagation()}
@@ -484,8 +484,8 @@ export default function Projects() {
 
       {/* Delete Confirmation Modal */}
       {confirmDeleteId && (
-        <div className="ws-backdrop" onMouseDown={() => setConfirmDeleteId(null)}>
-          <div className="ws-dialog" style={{ maxWidth: 440 }} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="ws-backdrop">
+          <div className="ws-dialog" style={{ maxWidth: 440 }}>
             <div className="ws-dialog-header">
               <div className="stat-icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 8, padding: 8 }}>
                 <AlertCircle size={24} />

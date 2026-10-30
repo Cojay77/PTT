@@ -75,8 +75,8 @@ export default function QuickCapture() {
   const Icon = currentType.icon;
 
   return (
-    <div className="quick-capture-overlay" onClick={() => setQuickCaptureOpen(false)}>
-      <div className="quick-capture-dialog" onClick={e => e.stopPropagation()}>
+    <div className="quick-capture-overlay">
+      <div className="quick-capture-dialog">
         {/* Type selector */}
         <div className="quick-capture-types">
           {TYPES.map(t => (

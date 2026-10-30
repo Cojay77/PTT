@@ -195,7 +195,7 @@ export function Modal({ title, onClose, children, footer, size = '' }: {
   }, [onClose]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div className={`modal${size ? ` modal-${size}` : ''}`} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
@@ -217,7 +217,7 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: {
   message: string; onConfirm: () => void; onCancel: () => void;
 }) {
   return (
-    <div className="modal-overlay" onClick={onCancel}>
+    <div className="modal-overlay">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-body" style={{ padding: 'var(--space-6)', textAlign: 'center' }}>
           <p style={{ color: 'var(--text-primary)', marginBottom: 'var(--space-6)' }}>{message}</p>

@@ -66,7 +66,7 @@ export default function NewProjectDialog() {
   }
 
   return (
-    <div className="ws-backdrop" onMouseDown={close} role="presentation">
+    <div className="ws-backdrop" role="presentation">
       <form
         className="ws-dialog"
         role="dialog"

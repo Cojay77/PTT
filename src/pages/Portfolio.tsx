@@ -1072,7 +1072,7 @@ export default function Portfolio() {
 
       {/* ── Add / Edit Modal ────────────────────────────────────────── */}
       {editModalOpen && (
-        <div className="modal-backdrop" onClick={() => setEditModalOpen(false)}>
+        <div className="modal-backdrop">
           <div className="modal-content" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>
@@ -1341,7 +1341,7 @@ export default function Portfolio() {
 
       {/* ── Scan Workspace Files Modal (Electron) ───────────────────── */}
       {scanModalOpen && (
-        <div className="modal-backdrop" onClick={() => setScanModalOpen(false)}>
+        <div className="modal-backdrop">
           <div className="modal-content" style={{ maxWidth: 600 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
