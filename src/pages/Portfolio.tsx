@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Briefcase, Plus, RefreshCw, FolderOpen, Download, Search,
   Calendar, DollarSign, User, CheckCircle2, AlertTriangle, Flame,
-  ExternalLink, Edit2, Trash2, ArrowUpDown, Clock, Milestone,
-  Layers, ChevronRight, Globe, Building2, Check,
+  ExternalLink, Edit2, Trash2, ArrowUpDown, Milestone,
+  Layers, ChevronRight, Globe, Building2,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { useDataStore } from '../store/useDataStore';

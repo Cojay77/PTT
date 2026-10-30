@@ -2,7 +2,7 @@ import { useState, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { useTaskStore } from '../store/useTaskStore';
 import { useDataStore } from '../store/useDataStore';
-import { ProgressBar, SeverityBadge, StatusBadge, MilestoneBadge } from '../components/ui/shared';
+import { ProgressBar, SeverityBadge, StatusBadge, MilestoneBadge, Avatar } from '../components/ui/shared';
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -11,7 +11,7 @@ import {
   Download, FileText, CheckSquare, Presentation, BarChart3, Copy, Check,
   AlertTriangle, TrendingUp, TrendingDown, Clock, Shield, Target, Zap,
   DollarSign, Activity, ArrowUpRight, ArrowDownRight, Minus, LayoutGrid,
-  Image, Loader2,
+  Image, Loader2, Calendar, User, Layers,
 } from 'lucide-react';
 import { exportTasksToCsv, exportRaidToCsv, downloadFile } from '../utils/export';
 import { projectConfigQueries } from '../db/queries';
@@ -22,6 +22,21 @@ import { computeBurndown } from '../utils/burndown';
 const COLORS = ['#4f8ef7', '#7c6af7', '#f74f8e', '#f79a4f', '#4ff7a8', '#f7d14f', '#4fd9f7'];
 const RISK_COLORS: Record<string, string> = {
   critical: '#dc2626', high: '#f97316', medium: '#fbbf24', low: '#22c55e',
+};
+const TASK_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  done: { label: 'Done', color: '#22c55e' },
+  'in-progress': { label: 'In Progress', color: '#4f8ef7' },
+  blocked: { label: 'Blocked', color: '#ef4444' },
+  waiting: { label: 'Waiting', color: '#f59e0b' },
+  planned: { label: 'Planned', color: '#64748b' },
+  backlog: { label: 'Backlog', color: '#8b5cf6' },
+  cancelled: { label: 'Cancelled', color: '#94a3b8' },
+};
+const RISK_CONFIG: Record<string, { label: string; color: string }> = {
+  critical: { label: 'Critical', color: '#dc2626' },
+  high: { label: 'High', color: '#f97316' },
+  medium: { label: 'Medium', color: '#fbbf24' },
+  low: { label: 'Low', color: '#22c55e' },
 };
 
 // ── KpiCard ──────────────────────────────────────────────────
@@ -215,17 +230,41 @@ export default function Reports() {
   const nextActions = openActions.slice(0, 6);
 
   // ── Charts ───────────────────────────────────────────────
-  const statusGroups = ['planned', 'in-progress', 'blocked', 'waiting', 'done', 'cancelled'].map(s => ({
-    name: s, value: activeTasks.filter(t => t.status === s).length,
-  })).filter(g => g.value > 0);
+  const statusData = useMemo(() => {
+    const rawOrder = ['done', 'in-progress', 'blocked', 'waiting', 'planned', 'backlog', 'cancelled'];
+    return rawOrder
+      .map(status => {
+        const count = activeTasks.filter(t => t.status === status).length;
+        const config = TASK_STATUS_CONFIG[status] || { label: status, color: '#64748b' };
+        return {
+          name: status,
+          label: config.label,
+          value: count,
+          color: config.color,
+        };
+      })
+      .filter(item => item.value > 0);
+  }, [activeTasks]);
 
   const priorityData = ['critical', 'high', 'medium', 'low'].map(p => ({
     name: p, Tasks: activeTasks.filter(t => t.priority === p && !['done', 'cancelled'].includes(t.status)).length,
   }));
 
-  const riskData = ['critical', 'high', 'medium', 'low'].map(s => ({
-    name: s, value: risks.filter(r => r.severity === s && r.status !== 'closed').length,
-  })).filter(g => g.value > 0);
+  const riskChartData = useMemo(() => {
+    const severities = ['critical', 'high', 'medium', 'low'];
+    return severities
+      .map(severity => {
+        const count = risks.filter(r => r.severity === severity && r.status !== 'closed').length;
+        const config = RISK_CONFIG[severity] || { label: severity, color: '#94a3b8' };
+        return {
+          name: severity,
+          label: config.label,
+          value: count,
+          color: config.color,
+        };
+      })
+      .filter(item => item.value > 0);
+  }, [risks]);
 
   const radarData = [
     { subject: 'Schedule', value: Math.max(0, 100 - overdueTasks.length * 15) },
@@ -236,10 +275,26 @@ export default function Reports() {
     { subject: 'Actions', value: Math.max(0, 100 - overdueActions.length * 15) },
   ];
 
-  const milestoneChartData = milestones.slice(0, 6).map(m => ({
-    name: m.name.length > 16 ? m.name.slice(0, 14) + '…' : m.name,
-    Progress: m.progress,
-  }));
+  const sortedMilestones = useMemo(() => {
+    return [...milestones].sort((a, b) => {
+      if (!a.targetDate && !b.targetDate) return 0;
+      if (!a.targetDate) return 1;
+      if (!b.targetDate) return -1;
+      return a.targetDate.localeCompare(b.targetDate);
+    });
+  }, [milestones]);
+
+  const milestoneStats = useMemo(() => {
+    const total = milestones.length;
+    const completed = milestones.filter(m => m.status === 'completed' || m.progress === 100).length;
+    const inProgress = milestones.filter(m => m.status === 'in-progress' && m.progress < 100).length;
+    const delayed = milestones.filter(m => m.status === 'delayed').length;
+    const atRisk = milestones.filter(m => m.status === 'at-risk').length;
+    const planned = milestones.filter(m => m.status === 'planned').length;
+    const avgProgress = total > 0 ? Math.round(milestones.reduce((acc, m) => acc + (m.progress || 0), 0) / total) : 0;
+    const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, inProgress, delayed, atRisk, planned, avgProgress, completionPct };
+  }, [milestones]);
 
   const budgetChartData = budgetItems.length > 0 ? [
     { name: 'Planned', amount: totalPlanned },
@@ -508,29 +563,153 @@ export default function Reports() {
               </div>
             </div>
 
-            <div className="card">
+            {/* ── Task Status Distribution (Donut + Side Legend - No Cropped Labels) ── */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
               <div className="card-header">
-                <LayoutGrid size={16} color="var(--accent)" />
-                <span className="section-title">Task Status Distribution</span>
+                <div className="flex items-center gap-2">
+                  <LayoutGrid size={16} color="var(--accent)" />
+                  <span className="section-title">Task Status Distribution</span>
+                </div>
+                <span className="badge" style={{ marginLeft: 'auto', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                  {activeTasks.length} active tasks
+                </span>
               </div>
-              <div style={{ height: 280, padding: '8px 16px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusGroups} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={44} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                      {statusGroups.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              {activeTasks.length === 0 ? (
+                <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <CheckSquare size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>No active tasks in this project</div>
+                </div>
+              ) : (
+                <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, flex: 1, minHeight: 250 }}>
+                  {/* Donut Chart with Center Metric */}
+                  <div style={{ position: 'relative', width: 160, height: 160, flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusData}
+                          dataKey="value"
+                          nameKey="label"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={74}
+                          paddingAngle={3}
+                          cornerRadius={4}
+                          stroke="var(--bg-card)"
+                          strokeWidth={2}
+                        >
+                          {statusData.map((d) => (
+                            <Cell key={d.name} fill={d.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(val: number, name: string) => [
+                            `${val} task${val > 1 ? 's' : ''} (${Math.round((val / activeTasks.length) * 100)}%)`,
+                            name,
+                          ]}
+                          contentStyle={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {/* Centered Total */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+                        {activeTasks.length}
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>
+                        Tasks
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Structured Status Legend */}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {statusData.map((item) => (
+                      <div
+                        key={item.name}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: '50%',
+                              background: item.color,
+                              flexShrink: 0,
+                              boxShadow: `0 0 6px ${item.color}66`,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: 'var(--text-primary)',
+                            }}
+                            className="truncate"
+                          >
+                            {item.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {item.value}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: 'var(--text-muted)',
+                              background: 'var(--bg-hover)',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            {Math.round((item.value / activeTasks.length) * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* ── Open Tasks by Priority ── */}
             <div className="card">
               <div className="card-header">
                 <AlertTriangle size={16} color="var(--accent)" />
                 <span className="section-title">Open Tasks by Priority</span>
               </div>
-              <div style={{ height: 220, padding: '8px 16px' }}>
+              <div style={{ height: 240, padding: '8px 16px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={priorityData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -547,93 +726,492 @@ export default function Reports() {
               </div>
             </div>
 
-            <div className="card">
+            {/* ── Risk Severity Breakdown (Donut + Side Legend - No Cropped Labels) ── */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
               <div className="card-header">
-                <Target size={16} color="var(--accent)" />
-                <span className="section-title">Milestone Progress</span>
-                <span className="badge status-done" style={{ marginLeft: 'auto' }}>{completedMilestones}/{milestones.length} done</span>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} color={criticalRisks > 0 ? 'var(--danger)' : highRisks > 0 ? 'var(--warning)' : 'var(--accent)'} />
+                  <span className="section-title">Risk Severity Breakdown</span>
+                </div>
+                <span
+                  className={`badge ${criticalRisks > 0 ? 'priority-critical' : highRisks > 0 ? 'priority-high' : 'status-done'}`}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {openRisks.length} open
+                </span>
               </div>
-              <div style={{ padding: '12px 24px' }}>
-                {milestones.slice(0, 6).map(m => (
-                  <div key={m.id} style={{ marginBottom: 12 }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <MilestoneBadge status={m.status} />
-                      <span style={{ fontSize: 12, fontWeight: 500, flex: 1, minWidth: 0 }} className="truncate">{m.name}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: m.progress === 100 ? 'var(--success)' : 'var(--text-primary)' }}>{m.progress}%</span>
+              {openRisks.length === 0 ? (
+                <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Shield size={32} color="var(--success)" style={{ margin: '0 auto 8px', opacity: 0.8 }} />
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>No Open Risks</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>All identified risks are resolved or mitigated</div>
+                </div>
+              ) : (
+                <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, flex: 1, minHeight: 240 }}>
+                  {/* Donut Chart with Center Metric */}
+                  <div style={{ position: 'relative', width: 150, height: 150, flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={riskChartData}
+                          dataKey="value"
+                          nameKey="label"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={46}
+                          outerRadius={68}
+                          paddingAngle={3}
+                          cornerRadius={4}
+                          stroke="var(--bg-card)"
+                          strokeWidth={2}
+                        >
+                          {riskChartData.map((d) => (
+                            <Cell key={d.name} fill={d.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(val: number, name: string) => [
+                            `${val} risk${val > 1 ? 's' : ''} (${Math.round((val / openRisks.length) * 100)}%)`,
+                            name,
+                          ]}
+                          contentStyle={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {/* Centered Total */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+                        {openRisks.length}
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>
+                        Open
+                      </div>
                     </div>
-                    <ProgressBar value={m.progress} color={m.status === 'delayed' ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : undefined} />
                   </div>
-                ))}
-                {milestones.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No milestones configured</div>}
-              </div>
+
+                  {/* Structured Severity Legend */}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {riskChartData.map((item) => (
+                      <div
+                        key={item.name}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: '50%',
+                              background: item.color,
+                              flexShrink: 0,
+                              boxShadow: `0 0 6px ${item.color}66`,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: 'var(--text-primary)',
+                            }}
+                            className="truncate"
+                          >
+                            {item.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {item.value}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: 'var(--text-muted)',
+                              background: 'var(--bg-hover)',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            {Math.round((item.value / openRisks.length) * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {riskData.length > 0 && (
-              <div className="card">
-                <div className="card-header">
-                  <AlertTriangle size={16} color="var(--danger)" />
-                  <span className="section-title">Risk Severity Breakdown</span>
-                  <span className="badge priority-high" style={{ marginLeft: 'auto' }}>{openRisks.length} open</span>
-                </div>
-                <div style={{ height: 220, padding: '8px 16px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={riskData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40} label={({ name, value }) => `${name}: ${value}`}>
-                        {riskData.map((d) => <Cell key={d.name} fill={RISK_COLORS[d.name] || '#999'} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
+            {/* ── Budget Overview (if configured) ── */}
             {budgetChartData.length > 0 && (
-              <div className="card">
-                <div className="card-header">
-                  <DollarSign size={16} color="var(--success)" />
-                  <span className="section-title">Budget Overview</span>
+              <div className="card" style={{ gridColumn: '1 / -1', padding: 0, overflow: 'hidden' }}>
+                <div className="card-header" style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+                  <div className="flex items-center gap-2">
+                    <DollarSign size={16} color="var(--success)" />
+                    <span className="section-title">Financial & Budget Overview</span>
+                  </div>
                   <span className={`badge ${budgetVariance > 0 ? 'priority-high' : 'status-done'}`} style={{ marginLeft: 'auto' }}>
-                    {budgetVariance >= 0 ? '+' : ''}{Math.round(budgetVariance / 1000)}k variance
+                    {budgetVariance >= 0 ? '+' : ''}{Math.round(budgetVariance / 1000)}k variance ({budgetPct}% consumed)
                   </span>
                 </div>
-                <div style={{ height: 220, padding: '8px 16px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={budgetChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                      <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                      <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                        {budgetChartData.map((_, i) => (
-                          <Cell key={i} fill={i === 0 ? '#4f8ef7' : i === 1 ? '#22c55e' : budgetVariance > 0 ? '#dc2626' : '#7c6af7'} />
-                        ))}
-                      </Bar>
-                      <Tooltip formatter={(v: number) => [fmt(v), 'Amount']} contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 360px', height: 220, minWidth: 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={budgetChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                        <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
+                        <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                          {budgetChartData.map((_, i) => (
+                            <Cell key={i} fill={i === 0 ? '#4f8ef7' : i === 1 ? '#22c55e' : budgetVariance > 0 ? '#dc2626' : '#7c6af7'} />
+                          ))}
+                        </Bar>
+                        <Tooltip formatter={(v: number) => [fmt(v), 'Amount']} contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ flex: '1 1 240px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Planned</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#4f8ef7', marginTop: 4 }}>{fmt(totalPlanned)}</div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spent to Date</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', marginTop: 4 }}>{fmt(totalSpent)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{budgetPct}% of planned</div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Forecast</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', marginTop: 4 }}>{fmt(totalForecast)}</div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Variance</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: budgetVariance > 0 ? 'var(--danger)' : 'var(--success)', marginTop: 4 }}>
+                        {budgetVariance >= 0 ? '+' : ''}{fmt(budgetVariance)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
-            {milestoneChartData.length > 0 && (
-              <div className="card">
-                <div className="card-header">
-                  <BarChart3 size={16} color="var(--accent)" />
-                  <span className="section-title">Milestone Completion Chart</span>
+            {/* ── Milestone Delivery Gates & Completion Roadmap (Executive Replacement for Histogram) ── */}
+            <div className="card" style={{ gridColumn: '1 / -1', padding: 0, overflow: 'hidden' }}>
+              <div className="card-header" style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 10 }}>
+                <div className="flex items-center gap-2">
+                  <Target size={16} color="var(--accent)" />
+                  <span className="section-title">Milestone Delivery Gates & Completion Roadmap</span>
                 </div>
-                <div style={{ height: 220, padding: '8px 16px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={milestoneChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-                      <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} unit="%" />
-                      <Bar dataKey="Progress" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-                      <Tooltip formatter={(v: number) => [`${v}%`, 'Progress']} contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="flex items-center gap-2" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
+                  <span className="badge status-done" style={{ fontWeight: 700 }}>
+                    {milestoneStats.completed}/{milestoneStats.total} Completed ({milestoneStats.completionPct}%)
+                  </span>
+                  {milestoneStats.inProgress > 0 && (
+                    <span className="badge status-in-progress">{milestoneStats.inProgress} In Progress</span>
+                  )}
+                  {milestoneStats.atRisk > 0 && (
+                    <span className="badge status-waiting">{milestoneStats.atRisk} At Risk</span>
+                  )}
+                  {milestoneStats.delayed > 0 && (
+                    <span className="badge status-blocked">{milestoneStats.delayed} Delayed</span>
+                  )}
                 </div>
               </div>
-            )}
+
+              {milestoneStats.total === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Target size={36} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>No Milestones Configured</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>Add project milestones in the Milestones tab to track delivery gates and completion status.</div>
+                </div>
+              ) : (
+                <>
+                  {/* Health Ribbon & Next Delivery Target */}
+                  <div style={{ padding: '12px 20px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Delivery Completion Health:</span>
+                        <span style={{ fontWeight: 700, color: milestoneStats.avgProgress >= 70 ? 'var(--success)' : milestoneStats.avgProgress >= 40 ? 'var(--accent)' : 'var(--warning)' }}>
+                          {milestoneStats.avgProgress}% Average Progress
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {nextMilestone ? (
+                          <span>
+                            Next Gate: <strong style={{ color: 'var(--text-primary)' }}>{nextMilestone.name}</strong> ({nextMilestone.targetDate}
+                            {daysToNextMilestone !== null && (
+                              <span style={{ color: daysToNextMilestone < 0 ? 'var(--danger)' : daysToNextMilestone <= 7 ? 'var(--warning)' : 'var(--accent)', fontWeight: 600 }}>
+                                {' '}· {daysToNextMilestone < 0 ? `${Math.abs(daysToNextMilestone)}d overdue` : `${daysToNextMilestone}d left`}
+                              </span>
+                            )})
+                          </span>
+                        ) : (
+                          <span>All active milestones reached</span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Multi-segment status bar */}
+                    <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-hover)', display: 'flex', overflow: 'hidden' }}>
+                      <div style={{ width: `${(milestoneStats.completed / milestoneStats.total) * 100}%`, background: '#22c55e', transition: 'width 0.4s ease' }} title={`Completed: ${milestoneStats.completed}`} />
+                      <div style={{ width: `${(milestoneStats.inProgress / milestoneStats.total) * 100}%`, background: '#4f8ef7', transition: 'width 0.4s ease' }} title={`In Progress: ${milestoneStats.inProgress}`} />
+                      <div style={{ width: `${(milestoneStats.atRisk / milestoneStats.total) * 100}%`, background: '#fbbf24', transition: 'width 0.4s ease' }} title={`At Risk: ${milestoneStats.atRisk}`} />
+                      <div style={{ width: `${(milestoneStats.delayed / milestoneStats.total) * 100}%`, background: '#ef4444', transition: 'width 0.4s ease' }} title={`Delayed: ${milestoneStats.delayed}`} />
+                      <div style={{ width: `${(milestoneStats.planned / milestoneStats.total) * 100}%`, background: '#64748b', transition: 'width 0.4s ease' }} title={`Planned: ${milestoneStats.planned}`} />
+                    </div>
+                  </div>
+
+                  {/* Chronological Gate Stepper Pipeline */}
+                  <div style={{ padding: '24px 20px', overflowX: 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: sortedMilestones.length > 3 ? `${sortedMilestones.length * 170}px` : '100%', position: 'relative' }}>
+                      {sortedMilestones.map((m, idx) => {
+                        const isLast = idx === sortedMilestones.length - 1;
+                        const isCompleted = m.status === 'completed' || m.progress === 100;
+                        const isDelayed = m.status === 'delayed';
+                        const isAtRisk = m.status === 'at-risk';
+                        const isInProgress = m.status === 'in-progress';
+                        const diff = m.targetDate ? differenceInDays(parseISO(m.targetDate), new Date()) : null;
+                        const isLate = diff !== null && diff < 0 && !isCompleted;
+
+                        const nodeColor = isCompleted
+                          ? '#22c55e'
+                          : isDelayed || isLate
+                          ? '#ef4444'
+                          : isAtRisk
+                          ? '#f59e0b'
+                          : isInProgress
+                          ? '#4f8ef7'
+                          : '#64748b';
+
+                        const nodeBg = isCompleted
+                          ? 'rgba(34, 197, 94, 0.15)'
+                          : isDelayed || isLate
+                          ? 'rgba(239, 68, 68, 0.15)'
+                          : isAtRisk
+                          ? 'rgba(245, 158, 11, 0.15)'
+                          : isInProgress
+                          ? 'rgba(79, 142, 247, 0.15)'
+                          : 'var(--bg-surface)';
+
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              textAlign: 'center',
+                              position: 'relative',
+                              padding: '0 8px',
+                            }}
+                          >
+                            {/* Connector Line to next node */}
+                            {!isLast && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: 15,
+                                  left: '50%',
+                                  width: '100%',
+                                  height: 3,
+                                  background: isCompleted ? '#22c55e' : isInProgress ? 'linear-gradient(90deg, #4f8ef7, var(--border))' : 'var(--border)',
+                                  zIndex: 1,
+                                }}
+                              />
+                            )}
+
+                            {/* Gate Node Circle */}
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: '50%',
+                                background: nodeBg,
+                                border: `2px solid ${nodeColor}`,
+                                color: nodeColor,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 2,
+                                boxShadow: isInProgress ? `0 0 10px ${nodeColor}88` : undefined,
+                                marginBottom: 10,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isCompleted ? (
+                                <Check size={16} strokeWidth={2.5} />
+                              ) : isDelayed || isLate ? (
+                                <AlertTriangle size={14} />
+                              ) : isAtRisk ? (
+                                <AlertTriangle size={14} />
+                              ) : isInProgress ? (
+                                <Clock size={14} />
+                              ) : (
+                                <span>{idx + 1}</span>
+                              )}
+                            </div>
+
+                            {/* Gate Title */}
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--text-primary)',
+                                maxWidth: 150,
+                                lineHeight: 1.3,
+                                marginBottom: 4,
+                              }}
+                              title={m.name}
+                              className="truncate"
+                            >
+                              {m.name}
+                            </div>
+
+                            {/* Date & Countdown */}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                              {m.targetDate || 'TBD'}
+                              {diff !== null && (
+                                <div
+                                  style={{
+                                    fontWeight: 600,
+                                    fontSize: 10,
+                                    marginTop: 1,
+                                    color: isCompleted
+                                      ? 'var(--success)'
+                                      : diff < 0
+                                      ? 'var(--danger)'
+                                      : diff <= 7
+                                      ? 'var(--warning)'
+                                      : 'var(--text-secondary)',
+                                  }}
+                                >
+                                  {isCompleted
+                                    ? 'Completed'
+                                    : diff < 0
+                                    ? `${Math.abs(diff)}d overdue`
+                                    : diff === 0
+                                    ? 'Due today'
+                                    : `in ${diff}d`}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Mini Progress Bar */}
+                            <div style={{ width: '85%', maxWidth: 120 }}>
+                              <div style={{ height: 5, borderRadius: 3, background: 'var(--bg-hover)', overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    height: '100%',
+                                    width: `${m.progress}%`,
+                                    background: nodeColor,
+                                    borderRadius: 3,
+                                    transition: 'width 0.4s ease',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: nodeColor, marginTop: 3 }}>
+                                {m.progress}%
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Detailed Milestone Status & Ownership Cards */}
+                  <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Layers size={14} />
+                      <span>Detailed Milestone Status & Ownership</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                      {sortedMilestones.map(m => {
+                        const diff = m.targetDate ? differenceInDays(parseISO(m.targetDate), new Date()) : null;
+                        const isDone = m.status === 'completed' || m.progress === 100;
+                        const isLate = diff !== null && diff < 0 && !isDone;
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-md)',
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 8,
+                              borderLeft: `3px solid ${isDone ? 'var(--success)' : isLate || m.status === 'delayed' ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : m.status === 'in-progress' ? 'var(--accent)' : 'var(--border)'}`,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3, flex: 1 }}>
+                                {m.name}
+                              </div>
+                              <MilestoneBadge status={m.status} />
+                            </div>
+                            {m.description && (
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }} className="truncate">
+                                {m.description}
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+                              <div className="flex items-center gap-1.5">
+                                {m.owner ? <Avatar name={m.owner} size={18} /> : <User size={12} />}
+                                <span>{m.owner || 'Unassigned'}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Calendar size={12} />
+                                <span>{m.targetDate || 'No date'}</span>
+                                {diff !== null && (
+                                  <span style={{ fontWeight: 600, color: isDone ? 'var(--success)' : isLate ? 'var(--danger)' : diff <= 7 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                                    ({isDone ? 'Done' : diff < 0 ? `${Math.abs(diff)}d late` : `${diff}d`})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <ProgressBar
+                              value={m.progress}
+                              color={m.status === 'delayed' || isLate ? 'var(--danger)' : m.status === 'at-risk' ? 'var(--warning)' : m.status === 'completed' ? 'var(--success)' : undefined}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </>
       ) : (
